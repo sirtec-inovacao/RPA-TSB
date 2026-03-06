@@ -35,10 +35,10 @@ jobs:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: python main.py
 
-      - name: 💾 Salvar config.json atualizado
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add config.json
-          git commit -m "🤖 Atualizando data de execução via nuvem [skip ci]" || echo "Nenhuma mudança de data"
-          git push
+     # - name: 💾 Salvar config.json atualizado
+     #   run: |
+     #     git config --global user.name 'github-actions[bot]'
+     #     git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+     #     git add config.json
+     #     git commit -m "🤖 Atualizando data de execução via nuvem [skip ci]" || echo "Nenhuma mudança de data"
+     #     git push
