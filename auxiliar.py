@@ -43,10 +43,12 @@ id_planilha_gsheet = os.environ.get("ID_PLANILHA_GSHEET")
 id_planilha_att_gsheet = os.environ.get("ID_PLANILHA_ATT_GSHEET")
 id_pasta_drive_final = os.environ.get("ID_PASTA_DRIVE_FINAL")
 
-# Planilha de Controle de Data
-id_planilha_controle = os.environ.get("ID_PLANILHA_CONTROLE", "1lM8Q3NIUrDsdR8OD_6RG0wAddXvq1PpWczuOUeOyivE")
-nome_aba_controle = os.environ.get("NOME_ABA_CONTROLE", "CONTROLE_GERAL_ROBOS")
-celula_data_controle = os.environ.get("CELULA_DATA_CONTROLE", "F16")
+# Planilha de Controle de Data (Se vier vazio da Action, usa o hardcoded como fallback)
+id_planilha_controle = os.environ.get("ID_PLANILHA_CONTROLE") 
+if not id_planilha_controle: id_planilha_controle = "1lM8Q3NIUrDsdR8OD_6RG0wAddXvq1PpWczuOUeOyivE"
+
+nome_aba_controle = os.environ.get("NOME_ABA_CONTROLE") or "CONTROLE_GERAL_ROBOS"
+celula_data_controle = os.environ.get("CELULA_DATA_CONTROLE") or "F16"
 
 # Sistemas Terceiros
 token_zuq = os.environ.get("TOKEN_ZUQ")

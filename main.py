@@ -24,7 +24,14 @@ def main():
     now_date = datetime.now().strftime("%d/%m/%Y")
     # Loop para executar enquanto a data inicial for diferente do dia atual
     while True:
-        if getDate() != now_date:
+        data_execucao = getDate()
+        
+        # Se não conseguir buscar a data, para a execução com erro claro
+        if data_execucao is None:
+            print(f"{l}# ERRO: Falha ao obter a data da planilha. Verifique as credenciais e o ID da planilha.{l}")
+            break
+
+        if data_execucao != now_date:
             
             # Remover arquivos antigos
             chrome.limpar_pasta_temp()
@@ -68,7 +75,6 @@ def main():
             # Atualiza planilha de robos                               
             gsheets.attsheets(id_planilha_att_gsheet, aba_att_gsheet)
 
-            
             # Atualizar data do arquivo config final
             writeDate(getDate(),getDate())
         else:
@@ -77,7 +83,10 @@ def main():
             break
 
 def getDate():
-    data_objeto = datetime.strptime(getInitialDate(), "%Y-%m-%dT%H:%M:%S")
+    data_raw = getInitialDate()
+    if not data_raw:
+        return None
+    data_objeto = datetime.strptime(data_raw, "%Y-%m-%dT%H:%M:%S")
     return data_objeto.strftime("%d/%m/%Y")
 
 main()
