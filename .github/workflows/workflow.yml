@@ -14,7 +14,7 @@ jobs:
       - name: 🐍 Configurar Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: 📦 Instalar bibliotecas
         run: pip install -r requirements.txt
@@ -32,6 +32,9 @@ jobs:
           TOKEN_ZUQ: ${{ vars.TOKEN_ZUQ }}
           LOGIN_GPM: ${{ vars.LOGIN_GPM }}
           SENHA_GPM: ${{ vars.SENHA_GPM }}
+          ID_PLANILHA_CONTROLE: ${{ vars.ID_PLANILHA_CONTROLE }}
+          NOME_ABA_CONTROLE: ${{ vars.NOME_ABA_CONTROLE }}
+          CELULA_DATA_CONTROLE: ${{ vars.CELULA_DATA_CONTROLE }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: python main.py
 

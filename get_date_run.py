@@ -1,17 +1,14 @@
+import os
 import json
 from datetime import datetime, timedelta
 from auxiliar import *
 from gsheets import Gsheets
 
-# ID e informações da planilha onde a data fica armazenada
-ID_PLANILHA_CONTROLE = '1lM8Q3NIUrDsdR8OD_6RG0wAddXvq1PpWczuOUeOyivE'
-NOME_ABA = 'CONTROLE_GERAL_ROBOS'
-CELULA_DATA = 'F16'
-
 def writeDate(initial_date, final_date):
+    """Função de Simulação: Apenas exibe as datas no log sem alterar o Google Sheets."""
     print("\n----------------------------------------------------------------------")
-    print("Modo SIMULAÇÃO ativo: A nova data NÃO será enviada para o Drive ainda.")
-    print(f"Datas processadas - Inicio: {initial_date} | Fim: {final_date}")
+    print(f"- [MODO SIMULAÇÃO] Datas processadas - Inicio: {initial_date} | Fim: {final_date}")
+    print("- Nenhuma alteração foi enviada para a planilha de controle.")
     print("----------------------------------------------------------------------\n")
     pass
 
@@ -19,9 +16,9 @@ def _buscar_data_planilha():
     try:
         gsheets = Gsheets()
         print("- Consultando data de execução no Google Sheets...")
-        planilha = gsheets.cliente_sheets.open_by_key(ID_PLANILHA_CONTROLE)
-        aba = planilha.worksheet(NOME_ABA)
-        valor_celula = aba.acell(CELULA_DATA).value
+        planilha = gsheets.cliente_sheets.open_by_key(id_planilha_controle)
+        aba = planilha.worksheet(nome_aba_controle)
+        valor_celula = aba.acell(celula_data_controle).value
         
         if valor_celula:
             # valor_celula vem como "06/03/2026 04:06"
@@ -31,7 +28,7 @@ def _buscar_data_planilha():
             data_objeto = datetime.strptime(data_str, "%d/%m/%Y")
             return data_objeto
         else:
-            print("# ALERTA: A célula de data (F16) no Google Sheets está vazia.")
+            print(f"# ALERTA: A célula de data ({celula_data_controle}) no Google Sheets está vazia.")
             return None
     except Exception as e:
         print(f"# Erro ao buscar a data no Google Sheets: {e}")
