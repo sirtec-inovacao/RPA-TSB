@@ -1,81 +1,55 @@
 import json
 from datetime import datetime, timedelta
 from auxiliar import *
+from gsheets import Gsheets
 
+# ID e informações da planilha onde a data fica armazenada
+ID_PLANILHA_CONTROLE = '1lM8Q3NIUrDsdR8OD_6RG0wAddXvq1PpWczuOUeOyivE'
+NOME_ABA = 'CONTROLE_GERAL_ROBOS'
+CELULA_DATA = 'F16'
 
 def writeDate(initial_date, final_date):
+    print("\n----------------------------------------------------------------------")
+    print("Modo SIMULAÇÃO ativo: A nova data NÃO será enviada para o Drive ainda.")
+    print(f"Datas processadas - Inicio: {initial_date} | Fim: {final_date}")
+    print("----------------------------------------------------------------------\n")
+    pass
 
-    initial_data_object = datetime.strptime(initial_date, "%d/%m/%Y")
-    final_data_object = datetime.strptime(final_date, "%d/%m/%Y")
-
-    # Adicionar um dia às datas
-    new_initial_date = initial_data_object + timedelta(days=1)
-    new_final_date = final_data_object + timedelta(days=1)
-
-    # Definir o final do dia como 23:59:59
-    final_do_dia = datetime(new_final_date.year, new_final_date.month, new_final_date.day, 23, 59, 59)
-
-    # Formatar para o formato desejado
-    initial_data_format = new_initial_date.strftime("%Y-%m-%dT00:00:00")
-    final_data_format = final_do_dia.strftime("%Y-%m-%dT%H:%M:%S")
-
+def _buscar_data_planilha():
     try:
-        with open(config_json, "r+") as json_file:
-            data = json.load(json_file)
-            data["initial_date"] = initial_data_format 
-            data["final_date"] = final_data_format
-            json_file.seek(0)
-            json.dump(data, json_file, indent=4)
-            json_file.truncate()
-            
-            print("- Campo 'initial_date e final_date' atualizado com sucesso no arquivo JSON.")
-    except FileNotFoundError:
-        print("# Arquivo JSON não encontrado para atualizar nova data.")
-    except json.JSONDecodeError:
-        print("# Erro ao decodificar o JSON para atualizar nova data.")
+        gsheets = Gsheets()
+        print("- Consultando data de execução no Google Sheets...")
+        planilha = gsheets.cliente_sheets.open_by_key(ID_PLANILHA_CONTROLE)
+        aba = planilha.worksheet(NOME_ABA)
+        valor_celula = aba.acell(CELULA_DATA).value
+        
+        if valor_celula:
+            # valor_celula vem como "06/03/2026 04:06"
+            # Extraímos apenas a data ("06/03/2026")
+            data_str = valor_celula.split(" ")[0]
+            # Convertermos para datetime para garantir que o formato está válido
+            data_objeto = datetime.strptime(data_str, "%d/%m/%Y")
+            return data_objeto
+        else:
+            print("# ALERTA: A célula de data (F16) no Google Sheets está vazia.")
+            return None
     except Exception as e:
-        print("# Ocorreu um erro para atualizar nova data:", e)
+        print(f"# Erro ao buscar a data no Google Sheets: {e}")
+        return None
 
 def getInitialDate():
-    try:
-        with open(config_json, "r") as json_file:
-            data = json.load(json_file)
-            initial_date = data.get("initial_date")
-        if initial_date is not None:
-            # print("last_date:", initial_date)
-            # Converter a string para objeto datetime
-            data_objeto = datetime.strptime(initial_date, "%Y-%m-%dT%H:%M:%S")
-            # Formatar para o formato desejado
-            data_formatada = data_objeto.strftime("%Y-%m-%dT%H:%M:%S")
-            return data_formatada
-        else:
-            print("# O campo 'initial_date' não foi encontrado no arquivo JSON.")
-    except FileNotFoundError:
-        print("# Arquivo JSON não encontrado.")
-    except json.JSONDecodeError:
-        print("# Erro ao decodificar o JSON.")
-    except Exception as e:
-        print("# Ocorreu um erro:", e)
-
-    return initial_date
+    data_objeto = _buscar_data_planilha()
+    if data_objeto:
+        # Formatar para o formato esperado pelo robô (Início do dia: 00:00:00)
+        data_formatada = data_objeto.strftime("%Y-%m-%dT00:00:00")
+        return data_formatada
+    return None
 
 def getFinalDate():
-    try:
-        with open(config_json, "r") as json_file:
-            data = json.load(json_file)
-            final_date = data.get("final_date")
-        if final_date is not None:
-            data_objeto = datetime.strptime(final_date, "%Y-%m-%dT%H:%M:%S")
-            # Formatar para o formato desejado
-            data_formatada = data_objeto.strftime("%Y-%m-%dT%H:%M:%S")
-            return data_formatada
-        else:
-            print("# O campo 'final_date' não foi encontrado no arquivo JSON.")
-    except FileNotFoundError:
-        print("# Arquivo JSON não encontrado.\n")
-    except json.JSONDecodeError:
-        print("# Erro ao decodificar o JSON.\n")
-    except Exception as e:
-        print(f'# Ocorreu um erro: {e} \n')
-
-    return final_date
+    data_objeto = _buscar_data_planilha()
+    if data_objeto:
+        # Formatar para o formato esperado pelo robô (Fim do dia: 23:59:59)
+        final_do_dia = datetime(data_objeto.year, data_objeto.month, data_objeto.day, 23, 59, 59)
+        data_formatada = final_do_dia.strftime("%Y-%m-%dT%H:%M:%S")
+        return data_formatada
+    return None
