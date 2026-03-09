@@ -28,13 +28,15 @@ jobs:
           ID_PLANILHA_GSHEET: ${{ vars.ID_PLANILHA_GSHEET }}
           ID_PLANILHA_ATT_GSHEET: ${{ vars.ID_PLANILHA_ATT_GSHEET }}
           ID_PASTA_DRIVE_FINAL: ${{ vars.ID_PASTA_DRIVE_FINAL }}
-          # Lendo das Secrets
+          
           TOKEN_ZUQ: ${{ vars.TOKEN_ZUQ }}
           LOGIN_GPM: ${{ vars.LOGIN_GPM }}
           SENHA_GPM: ${{ vars.SENHA_GPM }}
           ID_PLANILHA_CONTROLE: ${{ vars.ID_PLANILHA_CONTROLE }}
-          NOME_ABA_CONTROLE: ${{ vars.NOME_ABA_CONTROLE }}
-          CELULA_DATA_CONTROLE: ${{ vars.CELULA_DATA_CONTROLE }}
+          NOME_ABA_CONTROLE: ${{ vars.NOME_ABA }}
+          CELULA_DATA_CONTROLE: ${{ vars.CELULA_DATA }}
+          
+          # Lendo das Secrets
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: python main.py
 
