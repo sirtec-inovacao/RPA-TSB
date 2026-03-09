@@ -28,8 +28,8 @@ class Chrome:
         self.options.add_argument('--no-sandbox')
         self.options.add_argument('--disable-dev-shm-usage')
         self.options.add_argument('--force-device-scale-factor=0.67') # Zoom
+        self.options.add_argument("--disable-blink-features=AutomationControlled")
         self.options.add_argument("--disable-features=InsecureDownloadWarnings")
-        self.options.add_argument("--allow-running-insecure-content")
         
         # Define as preferências do Chrome
         prefs = {
@@ -42,8 +42,9 @@ class Chrome:
         }
         self.options.add_experimental_option('prefs', prefs)
         
-        # Oculta logs desnecessários
-        self.options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        # Oculta logs desnecessários e remove flags de automação
+        self.options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
+        self.options.add_experimental_option('useAutomationExtension', False)
 
         self.navegador = None
         self.janela_web_atual = None
@@ -51,6 +52,9 @@ class Chrome:
     def _navegar(self, destino):      
         if not self.navegador:
             self.navegador = webdriver.Chrome(options=self.options)
+            
+            # Remove flag de automação via JS
+            self.navegador.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             
             if 'GITHUB_ACTIONS' in os.environ:
                 self.navegador.execute_cdp_cmd("Page.setDownloadBehavior", {
@@ -156,56 +160,41 @@ class Chrome:
         self._logar_gpm(login_gpm, senha_gpm)
         self._navegar(consulta_url)
         
-        # INJEÇÃO VIA JAVASCRIPT: Mais confiável para campos com máscara e modo Headless
+        # DIGITAÇÃO HUMANA: Evita bloqueios de locale e aciona gatilhos do GPM
         data_str = self.getDate()
+        print(f"- Simulando digitação humana das datas: {data_str}")
         
-        # SIMULAÇÃO DE INTERAÇÃO HUMANA: Clica nos campos antes de injetar
-        print(f"- Preparando campos de data e injetando: {data_str}")
-        try:
-            self.navegador.find_element(By.ID, "data_inicial").click()
+        def digitar_humanizado(element_id, texto):
+            el = self.navegador.find_element(By.ID, element_id)
+            el.click()
+            el.clear()
             sleep(0.5)
-            self.navegador.find_element(By.ID, "data_final").click()
+            for char in texto:
+                el.send_keys(char)
+                sleep(0.1) # Delay entre caracteres
             sleep(0.5)
-        except:
-            pass
+            el.send_keys(Keys.TAB) # Sai do campo para acionar eventos
 
-        script_injecao = f"""
-            var campos = ['data_inicial', 'data_final'];
-            campos.forEach(function(id) {{
-                var el = document.getElementById(id);
-                el.value = '{data_str}';
-                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                el.dispatchEvent(new Event('blur', {{ bubbles: true }}));
-            }});
-        """
-        self.navegador.execute_script(script_injecao)
-        sleep(1) # Espera o site processar a injeção
-        
+        try:
+            from selenium.webdriver.common.keys import Keys
+            digitar_humanizado("data_inicial", data_str)
+            digitar_humanizado("data_final", data_str)
+        except Exception as e:
+            print(f"# Erro na digitação humana, tentando fallback JS: {e}")
+            self.navegador.execute_script(f"document.getElementById('data_inicial').value = '{data_str}';")
+            self.navegador.execute_script(f"document.getElementById('data_final').value = '{data_str}';")
+
         self._click('/html/body/form[5]/div/input')
         
-        print("- Aguardando carregamento dos dados na tabela...")
-        # Espera dinâmica: Só prossegue se encontrar uma célula com data na tabela
-        timeout = 30
-        start_time = time.time()
-        dados_carregados = False
-        
-        while time.time() - start_time < timeout:
-            try:
-                # Procura por qualquer texto que pareça uma data (dd/mm/aaaa) dentro da tabela de resultados
-                celulas = self.navegador.find_elements(By.XPATH, '//*[@id="tab_resultados"]//td')
-                for celula in celulas:
-                    if len(celula.text.strip()) >= 10: # Ex: 01/01/2024
-                        dados_carregados = True
-                        break
-                if dados_carregados:
-                    print("- Dados detectados na tabela!")
-                    break
-            except:
-                pass
-            sleep(2)
-        
-        if not dados_carregados:
-            print("# AVISO: Tempo limite de espera por dados atingido. Tentando exportar assim mesmo.")
+        print("- Aguardando processamento do GPM (vão de loading)...")
+        # Aguarda o overlay de "Processing..." sumir
+        try:
+            WebDriverWait(self.navegador, 20).until(
+                EC.invisibility_of_element_located((By.ID, "tab_resultados_processing"))
+            )
+            print("- Processamento concluído!")
+        except:
+            print("- Timeout aguardando overlay de processamento.")
         
         # Scroll para garantir que o site carregue todas as colunas (Lazy Loading)
         self.navegador.execute_script("window.scrollTo(0, document.body.scrollHeight);")
