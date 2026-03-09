@@ -34,6 +34,17 @@ def test_gpm_single():
                 print("- Conteúdo do arquivo gerado:")
                 for l in linhas:
                     print(f"  > {l.strip()}")
+            # 4. Upload para o Google Drive (Solicitado pelo Usuário)
+            from gsheets import Gsheets
+            from auxiliar import id_pasta_drive_final
+            
+            if id_pasta_drive_final:
+                print(f"- Iniciando upload para o Drive (Pasta: {id_pasta_drive_final})...")
+                gs = Gsheets()
+                gs.upload_para_drive(esperado, id_pasta_drive_final)
+                print("✅ SUCESSO: Arquivo enviado para o Google Drive.")
+            else:
+                print("⚠️ ALERTA: ID_PASTA_DRIVE_FINAL não configurado. Upload pulado.")
         else:
             print("❌ FALHA: Arquivo não foi encontrado na pasta temp.")
             
