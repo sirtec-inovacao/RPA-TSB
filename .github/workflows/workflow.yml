@@ -5,7 +5,7 @@ on:
 
 jobs:
   run-bot:
-    runs-on: ubuntu-latest # Usa Windows para manter o padrão das suas pastas
+    runs-on: windows-latest # Usa Windows para manter o padrão das suas pastas
 
     steps:
       - name: 📥 Baixar o código do repositório
