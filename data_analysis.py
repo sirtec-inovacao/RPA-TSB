@@ -272,7 +272,7 @@ def criar_dataframe(diretorio, comeca_com, termina_com):
             if termina_com == '.xlsx':
                 arq = pd.read_excel(os.path.join(diretorio, arquivo))
             elif termina_com == '.csv':
-                arq = pd.read_csv(os.path.join(diretorio, arquivo), sep=';', encoding='UTF-8', low_memory=False)
+                arq = pd.read_csv(os.path.join(diretorio, arquivo), sep=';', encoding='utf-8-sig', low_memory=False)
             base_dados.append(arq)
             # print(f"- Arquivo processado: {arquivo}")
         except Exception as e:
@@ -339,7 +339,7 @@ def loc_menor_entrada_pontomais():
         lambda x: None if x == datetime.strptime("23:59:59", "%H:%M:%S").time() else x
     )
 
-    df_parceiros.to_csv(os.path.join(path_temp,'menor-entrada-equipes.csv'), sep=';', index=False)
+    df_parceiros.to_csv(os.path.join(path_temp,'menor-entrada-equipes.csv'), sep=';', index=False, encoding='utf-8-sig')
     
     return df_parceiros
 

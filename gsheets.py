@@ -84,7 +84,7 @@ class Gsheets:
         """
         if not self.servico_drive:
             print('# Conexão com Drive não disponível. Upload cancelado.')
-            return
+            return False
 
         try:
             nome_arquivo = os.path.basename(caminho_arquivo)
@@ -116,6 +116,7 @@ class Gsheets:
                     supportsAllDrives=True  # Necessário para editar arquivos em Drives Compartilhados
                 ).execute()
                 print(f'✅ Arquivo "{nome_arquivo}" atualizado com sucesso!')
+                return True
             else:
                 # 3. SE O ARQUIVO NÃO EXISTE: Usa o método create() para criar um novo.
                 print(f'- Criando novo arquivo "{nome_arquivo}" no Drive...')
@@ -130,10 +131,12 @@ class Gsheets:
                     supportsAllDrives=True # Necessário para criar arquivos em Drives Compartilhados
                 ).execute()
                 print(f'✅ Upload do novo arquivo "{nome_arquivo}" concluído com sucesso! ID: {arquivo.get("id")}')
+                return True
 
         except Exception as e:
             print(f'# Erro durante o upload para o Google Drive: {e}')
             traceback.print_exc()
+            return False
 
     def attsheets(self, planilha_id, aba_nome):
         """
