@@ -154,8 +154,26 @@ class Chrome:
         data_objeto = datetime.strptime(getInitialDate(), "%Y-%m-%dT%H:%M:%S")
         return data_objeto.strftime("%d/%m/%Y")
 
-    def _processar_download(self, consulta_url, login_gpm, senha_gpm, operacao):
+    def baixar_consulta_turno(self, operacao):
+        """Método chamado pelo main.py para iniciar o processo por operação."""
+        print(f"----------------------------------------------------------------------")
+        print(f"- Iniciando download do consulta turno para operação {operacao}")
+        
+        if operacao == 'BA':
+            consulta_url = 'https://sirtecba.gpm.srv.br/gpm/geral/consulta_turno.php'
+            login_gpm = os.getenv('LOGIN_GPM_BA')
+            senha_gpm = os.getenv('PASSWORD_GPM_BA')
+        elif operacao == 'CE':
+            consulta_url = 'https://sirtecce.gpm.srv.br/gpm/geral/consulta_turno.php'
+            login_gpm = os.getenv('LOGIN_GPM_CE')
+            senha_gpm = os.getenv('PASSWORD_GPM_CE')
+        else:
+            print(f"# Operação {operacao} não reconhecida.")
+            return
 
+        self._processar_download(consulta_url, login_gpm, senha_gpm, operacao)
+
+    def _processar_download(self, consulta_url, login_gpm, senha_gpm, operacao):
         login_url = f'https://sirtec{operacao.lower()}.gpm.srv.br/index.php'
 
         self._navegar(login_url)
