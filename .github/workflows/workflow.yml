@@ -39,7 +39,7 @@ jobs:
           # Lendo das Secrets
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: python test_gpm.py
-
+        #run: python main.py
       # - name: 💾 Salvar config.json atualizado
       #   run: |
       #     git config --global user.name 'github-actions[bot]'

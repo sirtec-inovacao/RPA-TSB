@@ -13,51 +13,36 @@ from auxiliar import *
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # TensorFlow logs: erros apenas
 
-class Chrome:
+class BrowserGPM:
     def __init__(self):
-        """Construtor que configura todas as opções do Chrome."""
-        self.options = webdriver.ChromeOptions()
+        """Construtor que configura todas as opções do Firefox."""
+        self.options = webdriver.FirefoxOptions()
 
         if 'GITHUB_ACTIONS' in os.environ:
-            self.options.add_argument('--headless=new')
-            self.options.add_argument('--lang=pt-BR')
+            self.options.add_argument('--headless')
         
-        # User-Agent Spoofing: Simula um navegador Windows real para evitar bloqueios de robô
-        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        self.options.add_argument(f"user-agent={user_agent}")
+        # User-Agent Spoofing: Simula um navegador Windows real
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
+        self.options.set_preference("general.useragent.override", user_agent)
         
-        # self.options.add_argument('--headless') # janela oculta
-        self.options.add_argument('--window-size=1920,1080')
-        self.options.add_argument('--disable-gpu')
-        self.options.add_argument('--no-sandbox')
-        self.options.add_argument('--disable-dev-shm-usage')
-        self.options.add_argument('--force-device-scale-factor=0.67') # Zoom
-        self.options.add_argument("--disable-blink-features=AutomationControlled")
-        self.options.add_argument("--disable-features=InsecureDownloadWarnings")
-        
-        # Define as preferências do Chrome
-        prefs = {
-            "profile.managed_default_content_settings.images": 2,
-            "download.default_directory": os.path.abspath(path_downloads),
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": True,
-            "intl.accept_languages": "pt-BR,pt"
-        }
-        self.options.add_experimental_option('prefs', prefs)
-        
-        # Oculta logs desnecessários e remove flags de automação
-        self.options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
-        self.options.add_experimental_option('useAutomationExtension', False)
+        # Regionalização e Idioma
+        self.options.set_preference("intl.accept_languages", "pt-BR, pt")
+        self.options.set_preference("javascript.enabled", True)
+
+        # Configurações de Download (Firefox é diferente do Chrome)
+        self.options.set_preference("browser.download.folderList", 2) # 2 = pasta customizada
+        self.options.set_preference("browser.download.dir", os.path.abspath(path_downloads))
+        self.options.set_preference("browser.download.useDownloadDir", True)
+        self.options.set_preference("browser.download.viewableInternally.enabledTypes", "")
+        self.options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/zip,application/octet-stream,application/csv,text/csv")
+        self.options.set_preference("pdfjs.disabled", True) # Evita abrir PDF no navegador
 
         self.navegador = None
         self.janela_web_atual = None
 
-    def _navegar(self, destino):      
+    def _navegar(self, destino):
         if not self.navegador:
-            self.navegador = webdriver.Chrome(options=self.options)
-            
-            # Remove flag de automação via JS
+            self.navegador = webdriver.Firefox(options=self.options)
             self.navegador.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             
             if 'GITHUB_ACTIONS' in os.environ:
@@ -370,3 +355,6 @@ class Chrome:
                         os.remove(os.path.join(path_downloads, f))
                     except:
                         pass
+
+# Alias de compatibilidade para o main.py antigo
+Chrome = BrowserGPM

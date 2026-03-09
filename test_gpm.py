@@ -1,26 +1,26 @@
 import os
-from download_gpm import Chrome
+from download_gpm import BrowserGPM
 from get_date_run import writeDate
 from auxiliar import path_temp, path_downloads
 import shutil
 
 def test_gpm_single():
-    print("=== INICIANDO TESTE UNITÁRIO GPM ===")
+    print("=== INICIANDO TESTE UNITÁRIO GPM (FIREFOX) ===")
     
     # Configura uma data de teste se necessário
     # writeDate("2024-03-01T00:00:00") 
     
-    chrome = Chrome()
+    browser = BrowserGPM()
     
     # 1. Limpeza inicial
     print("- Limpando ambiente de teste...")
-    chrome.limpar_pasta_temp()
-    chrome.limpar_downloads_inicial()
+    browser.limpar_pasta_temp()
+    browser.limpar_downloads_inicial()
     
     # 2. Executa apenas para BA como teste
     try:
         print("- Testando Operação BA...")
-        chrome.baixar_consulta_turno("BA")
+        browser.baixar_consulta_turno("BA")
         
         # 3. Verifica se o arquivo apareceu na pasta temp
         esperado = os.path.join(path_temp, "consulta turno BA.csv")
