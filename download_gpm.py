@@ -45,12 +45,6 @@ class BrowserGPM:
             self.navegador = webdriver.Firefox(options=self.options)
             self.navegador.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             
-            if 'GITHUB_ACTIONS' in os.environ:
-                self.navegador.execute_cdp_cmd("Page.setDownloadBehavior", {
-                    "behavior": "allow",
-                    "downloadPath": os.path.abspath(path_downloads)
-                })
-            
             self.janela_web_atual = self.navegador.current_window_handle
             
         print(f"- Acessando página web: {destino}")
