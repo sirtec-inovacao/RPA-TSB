@@ -65,12 +65,20 @@ def main():
             # Processar os logs dos veículos para a operação BA
             arquivo_final_ba = da.process_vehicle_logs_by_operation(path_temp, "BA", notifications_file)
             if arquivo_final_ba and id_pasta_drive_final:
-                gsheets.upload_para_drive(arquivo_final_ba, id_pasta_drive_final)
+                sucesso_ba = gsheets.upload_para_drive(arquivo_final_ba, id_pasta_drive_final)
+                if sucesso_ba:
+                    print(f"\nSUCESSO: Arquivo BA salvo no Drive ({os.path.basename(arquivo_final_ba)})")
+                else:
+                    print(f"\nERRO: Falha ao salvar arquivo BA no Drive ({os.path.basename(arquivo_final_ba)})")
 
             # Processar os logs dos veículos para a operação CE
             arquivo_final_ce = da.process_vehicle_logs_by_operation(path_temp, "CE", notifications_file)
             if arquivo_final_ce and id_pasta_drive_final:
-                gsheets.upload_para_drive(arquivo_final_ce, id_pasta_drive_final)
+                sucesso_ce = gsheets.upload_para_drive(arquivo_final_ce, id_pasta_drive_final)
+                if sucesso_ce:
+                    print(f"\nSUCESSO: Arquivo CE salvo no Drive ({os.path.basename(arquivo_final_ce)})")
+                else:
+                    print(f"\nERRO: Falha ao salvar arquivo CE no Drive ({os.path.basename(arquivo_final_ce)})")
             
             # Atualiza planilha de robos                               
             gsheets.attsheets(id_planilha_att_gsheet, aba_att_gsheet)
