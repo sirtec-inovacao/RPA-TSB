@@ -13,7 +13,10 @@ column_index = 3
 def process_file(file_path, operacao):
     # 2. Carregar o arquivo CSV em um DataFrame com especificação do separador
     try:
-        df = pd.read_csv(file_path, sep=';')  # Especificando o separador como ponto e vírgula
+        df = pd.read_csv(file_path, sep=';', encoding='utf-8-sig')  # Especificando o separador e encoding
+        print(f"--- [DEBUG] Lendo arquivo: {os.path.basename(file_path)}")
+        print(f"--- [DEBUG] Colunas identificadas: {df.columns.tolist()}")
+        print(f"--- [DEBUG] Primeiras linhas:\n{df.head(2).to_string()}")
     except Exception as e:
         print(f"# Erro ao ler o arquivo {file_path}: {e}")
         return None
@@ -80,7 +83,7 @@ def process_file(file_path, operacao):
 
     # Salvar o DataFrame processado no mesmo arquivo CSV
     try:
-        df.to_csv(file_path, sep=';', index=False)
+        df.to_csv(file_path, sep=';', index=False, encoding='utf-8-sig')
         print(f"- Arquivo processado e salvo no mesmo local: {file_path}")
     except Exception as e:
         print(f"# Erro ao salvar o arquivo {file_path}: {e}")
@@ -142,12 +145,12 @@ def process_consulta_turno_files(path_temp, pontomais_df, operacao):
         if filename.startswith(f"consulta turno {operacao}") and filename.endswith(".csv"):
             # Ler o arquivo "consulta turno"
             file_path = os.path.join(path_temp, filename)
-            consulta_turno_df = pd.read_csv(file_path, sep=';')
+            consulta_turno_df = pd.read_csv(file_path, sep=';', encoding='utf-8-sig')
 
             # Função para extrair o primeiro nome da coluna 'parceiros'
             def extrair_primeiro_nome(parceiros):
                 return parceiros.split(' - ')[0] if isinstance(parceiros, str) else None
-
+            
             # Aplicar a função para extrair o primeiro nome em cada linha da coluna 'parceiros'
             consulta_turno_df['primeiro_nome'] = consulta_turno_df['parceiros'].apply(extrair_primeiro_nome)
             
@@ -172,7 +175,7 @@ def process_consulta_turno_files(path_temp, pontomais_df, operacao):
             consulta_turno_df['date_hour_pontomais'] = consulta_turno_df['data'].astype(str) + ' ' + consulta_turno_df['hora_pontomais'].astype(str)
 
             # Salvar o arquivo "consulta turno" com as novas colunas, sobrescrevendo o conteúdo original
-            consulta_turno_df.to_csv(file_path, sep=';', index=False)
+            consulta_turno_df.to_csv(file_path, sep=';', index=False, encoding='utf-8-sig')
             print(f"- Arquivo processado e salvo: {file_path}\n")
 
 def load_vehicle_records(file_path):
@@ -226,7 +229,7 @@ def process_vehicle_logs_by_operation(path_temp, operacao, notifications_file):
     # Ler o arquivo "consulta turno" correspondente à operação
     consulta_turno_file = f"consulta turno {operacao}.csv"
     consulta_turno_path = os.path.join(path_temp, consulta_turno_file)
-    consulta_turno_df = pd.read_csv(consulta_turno_path, sep=';')
+    consulta_turno_df = pd.read_csv(consulta_turno_path, sep=';', encoding='utf-8-sig')
 
     # Verificar se a coluna 'hour_km_run_pontomais' existe, se não, criar com valores vazios
     if 'hour_km_run_pontomais' not in consulta_turno_df.columns:
@@ -242,7 +245,7 @@ def process_vehicle_logs_by_operation(path_temp, operacao, notifications_file):
                 consulta_turno_df.at[index, 'hour_km_run_pontomais'] = event_date
 
     # Salvar o arquivo "consulta turno" com as atualizações na coluna 'hour_km_run_pontomais'
-    consulta_turno_df.to_csv(consulta_turno_path, sep=';', index=False)
+    consulta_turno_df.to_csv(consulta_turno_path, sep=';', index=False, encoding='utf-8-sig')
     print(f"\n- Arquivo 'consulta turno {operacao}' processado e salvo com as atualizações na coluna 'hour_km_run_pontomais'.")
         
     # Fazer uma cópia do arquivo, renomear e mover para a pasta final
