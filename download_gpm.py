@@ -154,11 +154,9 @@ class Chrome:
         data_objeto = datetime.strptime(getInitialDate(), "%Y-%m-%dT%H:%M:%S")
         return data_objeto.strftime("%d/%m/%Y")
 
-    def baixar_consulta_turno(self, operacao):
+    def _processar_download(self, consulta_url, login_gpm, senha_gpm, operacao):
 
-        print(f'{l}- Iniciando download do consulta turno para operação {operacao}')
         login_url = f'https://sirtec{operacao.lower()}.gpm.srv.br/index.php'
-        consulta_url = f'https://sirtec{operacao.lower()}.gpm.srv.br/gpm/geral/consulta_turno.php'
 
         self._navegar(login_url)
         self._logar_gpm(login_gpm, senha_gpm)
@@ -199,40 +197,115 @@ class Chrome:
             print("- Processamento concluído!")
         except:
             print("- Timeout aguardando overlay de processamento.")
-            
+
+        # Tenta selecionar "Ver Todos" no Datatables para garantir que todos os dados estejam no DOM
+        print("- Tentando expandir visualização para 'Todos' os registros...")
+        try:
+            self.navegador.execute_script("if($.fn.DataTable.isDataTable('#tab_resultados')) { $('#tab_resultados').DataTable().page.len(-1).draw(); }")
+            sleep(5)
+        except:
+            pass
+
         # INSPEÇÃO VISUAL DA TABELA (DIAGNÓSTICO): Verifica se os dados existem na tela
         print("- [DIAGNÓSTICO] Inspecionando dados na tabela visível do navegador...")
+        tabela_com_dados = False
         try:
-            # Pega o texto da primeira linha de dados na tabela (tr[1] dentro do tbody)
             linha_dados = self.navegador.find_element(By.XPATH, '//*[@id="tab_resultados"]/tbody/tr[1]')
             texto_linha = linha_dados.text.strip()
-            if texto_linha:
+            if texto_linha and len(texto_linha) > 10:
                 print(f"- [DEBUG VISUAL] Dados encontrados na 1ª linha da tela: {texto_linha[:150]}...")
-                if data_str in texto_linha:
-                    print("- [DEBUG VISUAL] Sucesso: A data digitada foi encontrada na tabela da tela!")
-                else:
-                    print("- [DEBUG VISUAL] Alerta: A data digitada NÃO foi encontrada na 1ª linha da tabela.")
+                tabela_com_dados = True
             else:
-                print("- [DEBUG VISUAL] Alerta: A 1ª linha da tabela na tela está VAZIA.")
+                print("- [DEBUG VISUAL] Alerta: Tabela visível parece vazia.")
         except Exception as e:
-            print(f"- [DEBUG VISUAL] Não foi possível ler a tabela na tela: {e}")
-        
-        # Scroll para garantir que o site carregue todas as colunas (Lazy Loading)
-        self.navegador.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        sleep(2)
-        self.navegador.execute_script("window.scrollTo(0, 0);")
-        sleep(2)
-        
-        self._click('//*[@id="tab_resultados_wrapper"]/div[1]/button[4]')
-        print("- Clique no botão de exportação realizado.")
-        sleep(15)
+            print(f"- [DEBUG VISUAL] Erro ao ler tabela: {e}")
+
+        # TENTATIVA DE EXPORTAÇÃO DINÂMICA
+        print("- Localizando botão de exportação CSV via classe...")
+        exportou_sucesso = False
+        try:
+            btn_csv = self.navegador.find_element(By.CLASS_NAME, "buttons-csv")
+            btn_csv.click()
+            print("- Clique no botão .buttons-csv realizado.")
+            exportou_sucesso = True
+            sleep(15)
+        except:
+            print("- Botão .buttons-csv não encontrado. Tentando clique por índice antigo...")
+            try:
+                self._click('//*[@id="tab_resultados_wrapper"]/div[1]/button[4]')
+                exportou_sucesso = True
+                sleep(15)
+            except:
+                print("- Falha em todos os métodos de clique de exportação.")
+
+        # PLANO DE CONTINGÊNCIA: SCRAPING DIRETO DA TELA (Caso o export do site falhe no GitHub)
+        if tabela_com_dados:
+            print("- [BACKUP] Iniciando scraping direto da tela via JS para garantir dados...")
+            try:
+                # Script JS para extrair os dados da tabela em formato CSV
+                script_scraper = """
+                var csv = [];
+                var rows = document.querySelectorAll("#tab_resultados tr");
+                for (var i = 0; i < rows.length; i++) {
+                    var row = [], cols = rows[i].querySelectorAll("td, th");
+                    for (var j = 0; j < cols.length; j++) 
+                        row.push(cols[j].innerText.replace(/;/g, ",")); // Troca ; por , interno
+                    csv.push(row.join(";"));
+                }
+                return csv.join("\\n");
+                """
+                csv_data = self.navegador.execute_script(script_scraper)
+                
+                # Salva o resultado do scraping como um arquivo CSV de backup
+                backup_filename = f"SCRAPED_BACKUP_{operacao}.csv"
+                backup_path = os.path.join(path_downloads, backup_filename)
+                with open(backup_path, "w", encoding="utf-8-sig") as f:
+                    f.write(csv_data)
+                print(f"- [BACKUP] Scraping concluído e salvo em: {backup_filename}")
+            except Exception as e:
+                print(f"- [BACKUP] Falha no scraping manual: {e}")
 
         self._fechar_chrome()
-
-        # Tratamento do arquivo após o download (igual na função antiga)
-        self.descompactar_e_renomear(path_downloads, operacao, "consulta turno")
-        self.limpar_arquivos_zip(path_downloads)
+        
+        # ORGANIZAÇÃO DE ARQUIVOS
+        self._organizar_arquivos_v5(operacao)
         print(f'- Processo de download do consulta turno finalizado para operação {operacao}')
+
+    def _organizar_arquivos_v5(self, operacao):
+        # código de descompactação e renomeação
+        files = os.listdir(path_downloads)
+        zip_files = [f for f in files if f.endswith('.zip')]
+        
+        if zip_files:
+            for zip_name in zip_files:
+                zip_path = os.path.join(path_downloads, zip_name)
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(path_downloads)
+                
+                print(f"- Arquivo {zip_path} descompactado")
+                
+                extracted_files = [f for f in os.listdir(path_downloads) if f.endswith('.csv') and 'SCRAPED' not in f]
+                for ext_file in extracted_files:
+                    old_path = os.path.join(path_downloads, ext_file)
+                    new_filename = f"consulta turno {operacao}.csv"
+                    new_path = os.path.join(path_temp, new_filename)
+                    shutil.move(old_path, new_path)
+                    print(f"- Arquivo renomeado e movido para {new_path}")
+                
+                os.remove(zip_path)
+                print(f"- Arquivo {zip_name} removido com sucesso!")
+        
+        # Caso especial: Se não veio ZIP ou se o CSV veio vazio, usamos o BACKUP de scraping
+        backup_file = f"SCRAPED_BACKUP_{operacao}.csv"
+        backup_path = os.path.join(path_downloads, backup_file)
+        if os.path.exists(backup_path):
+            new_path = os.path.join(path_temp, f"consulta turno {operacao}.csv")
+            # Só usa o scraping se o original não existir ou estiver quase vazio
+            if not os.path.exists(new_path) or os.path.getsize(new_path) < 500:
+                shutil.move(backup_path, new_path)
+                print(f"- [ROBUSTEZ] Usando dados capturados via SCRAPING direto da tela para '{operacao}'.")
+            else:
+                if os.path.exists(backup_path): os.remove(backup_path)
 
 
 ##### outros ###             
