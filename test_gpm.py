@@ -8,7 +8,7 @@ def test_gpm_single():
     print("=== INICIANDO TESTE UNITÁRIO GPM (REFERÊNCIA: COLETOR) ===")
     
     # Iniciamos com headless=True para o Actions conforme solicitado
-    browser = BrowserGPM(headless=False)
+    browser = BrowserGPM(headless=True)
     
     # FORÇAR DATA FIXA PARA TESTE (Solicitado pelo Usuário)
     browser.getDate = lambda: "05/03/2026" 
