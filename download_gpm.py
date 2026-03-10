@@ -14,12 +14,20 @@ from auxiliar import *
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # TensorFlow logs: erros apenas
 
 class BrowserGPM:
-    def __init__(self):
-        """Construtor que configura todas as opções do Firefox."""
+    def __init__(self, headless=None):
+        """
+        Construtor que configura todas as opções do Firefox.
+        :param headless: Se True, roda sem janela. Se None, decide com base no ambiente.
+        """
+        if headless is None:
+            headless = 'GITHUB_ACTIONS' in os.environ
+
         self.options = webdriver.FirefoxOptions()
 
-        if 'GITHUB_ACTIONS' in os.environ:
+        if headless:
             self.options.add_argument('--headless')
+        else:
+            print("- [MODO VISÍVEL] Abrindo navegador com interface...")
         
         # User-Agent Spoofing: Simula um navegador Windows real
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
