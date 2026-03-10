@@ -5,15 +5,12 @@ from auxiliar import path_temp, path_downloads
 import shutil
 
 def test_gpm_single():
-    print("=== INICIANDO TESTE UNITÁRIO GPM (FIREFOX) ===")
+    print("=== INICIANDO TESTE UNITÁRIO GPM (REFERÊNCIA: COLETOR) ===")
     
-    # Configura uma data de teste se necessário
-    # writeDate("2024-03-01T00:00:00") 
-    
-    browser = BrowserGPM()
+    # Iniciamos com headless=True para o Actions conforme solicitado
+    browser = BrowserGPM(headless=True)
     
     # FORÇAR DATA FIXA PARA TESTE (Solicitado pelo Usuário)
-    # Ao sobrescrever este método, o robô ignorará a planilha e usará esta data.
     browser.getDate = lambda: "05/03/2026" 
     print(f"- [MODO TESTE] Data forçada para: {browser.getDate()}")
     
@@ -22,40 +19,94 @@ def test_gpm_single():
     browser.limpar_pasta_temp()
     browser.limpar_downloads_inicial()
     
-    # 2. Executa apenas para BA como teste
     try:
-        print("- Testando Operação BA...")
-        browser.baixar_consulta_turno("BA")
+        # REFERÊNCIA DE LOGIN (Baseada em coletor_faturamento.py)
+        # O GPM às vezes exige uma navegação direta para garantir o foco
+        login_url = "https://sirtecba.gpm.srv.br/"
+        browser._navegar(login_url)
+        
+        print("🔑 Realizando login (Padrão Coletor)...")
+        login_gpm = os.getenv('LOGIN_GPM')
+        senha_gpm = os.getenv('SENHA_GPM')
+        
+        # Uso de IDs diretos e esperas mais longas conforme ref
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.webdriver.common.by import By
+        
+        WebDriverWait(browser.navegador, 60).until(EC.presence_of_element_located((By.ID, "idLogin"))).send_keys(login_gpm)
+        browser.navegador.find_element(By.ID, "idSenha").send_keys(senha_gpm)
+        
+        # XPATH do botão de login idêntico ao de sucesso do usuário
+        btn_login_xpath = '//*[@id="logar"]/div/div/div/div/div/div/div[4]/div[2]/div[2]/div[1]/input'
+        browser.navegador.find_element(By.XPATH, btn_login_xpath).click()
+        
+        print("⏳ Aguardando tela inicial após login...")
+        WebDriverWait(browser.navegador, 60).until(EC.presence_of_element_located((By.XPATH, '/html/body/div[1]')))
+        print("✅ Login realizado com sucesso!")
+
+        # NAVEGAÇÃO PARA CONSULTA TURNO
+        consulta_url = "https://sirtecba.gpm.srv.br/gpm/geral/consulta_turno.php"
+        browser._navegar(consulta_url)
+        
+        print("⏳ Esperando carregamento dos filtros...")
+        WebDriverWait(browser.navegador, 60).until(EC.presence_of_element_located((By.ID, "data_inicial")))
+        
+        # Preenchimento das datas (Padrão do ref: send_keys direto)
+        data_str = browser.getDate()
+        browser.navegador.find_element(By.ID, "data_inicial").clear()
+        browser.navegador.find_element(By.ID, "data_inicial").send_keys(data_str)
+        browser.navegador.find_element(By.ID, "data_final").clear()
+        browser.navegador.find_element(By.ID, "data_final").send_keys(data_str)
+        
+        print(f"➡️ Submetendo consulta para: {data_str}")
+        # Botão de submissão (Padrão do ref)
+        browser.navegador.find_element(By.ID, "submit").click()
+        
+        # Espera a tabela carregar (Padrão do ref)
+        WebDriverWait(browser.navegador, 60).until(EC.presence_of_element_located((By.ID, "tab_resultados")))
+        print("✅ Resultados carregados!")
+
+        # EXPORTAÇÃO (Padrão do ref usa clique no botão CSV)
+        # Adaptado para o XPATH correto da consulta turno
+        print("💾 Clicando no botão de exportação CSV...")
+        try:
+            # Tenta o botão pela classe como o Robô costuma fazer
+            browser.navegador.find_element(By.CLASS_NAME, "buttons-csv").click()
+        except:
+            # Fallback para o XPATH fixo do GPM se disponível
+            browser.navegador.find_element(By.XPATH, '//*[@id="tab_resultados_wrapper"]/div[1]/button[4]').click()
+        
+        import time
+        time.sleep(15) # Espera o download concluir
+
+        # ORGANIZAÇÃO E RENOMEAÇÃO (Lógica interna do Robô)
+        browser._organizar_arquivos_v5("BA")
         
         # 3. Verifica se o arquivo apareceu na pasta temp
         esperado = os.path.join(path_temp, "consulta turno BA.csv")
         if os.path.exists(esperado):
-            tamanho = os.path.getsize(esperado)
-            print(f"✅ SUCESSO: Arquivo gerado em {esperado} ({tamanho} bytes)")
+            print(f"✅ SUCESSO: Arquivo gerado em {esperado}")
             
-            # Lê as primeiras linhas para ver se tem datas
-            with open(esperado, 'r', encoding='utf-8-sig') as f:
-                linhas = [f.readline() for _ in range(3)]
-                print("- Conteúdo do arquivo gerado:")
-                for l in linhas:
-                    print(f"  > {l.strip()}")
-            # 4. Upload para o Google Drive (Solicitado pelo Usuário)
+            # 4. Upload para o Google Drive
             from gsheets import Gsheets
             from auxiliar import id_pasta_drive_final
-            
             if id_pasta_drive_final:
-                print(f"- Iniciando upload para o Drive (Pasta: {id_pasta_drive_final})...")
+                print("- Iniciando upload para o Drive...")
                 gs = Gsheets()
                 gs.upload_para_drive(esperado, id_pasta_drive_final)
                 print("✅ SUCESSO: Arquivo enviado para o Google Drive.")
-            else:
-                print("⚠️ ALERTA: ID_PASTA_DRIVE_FINAL não configurado. Upload pulado.")
         else:
-            print("❌ FALHA: Arquivo não foi encontrado na pasta temp.")
-            
+            print("❌ FALHA: Arquivo não foi encontrado após download.")
+
     except Exception as e:
         print(f"💥 ERRO DURANTE O TESTE: {e}")
+        # Tira screenshot se der erro (Padrão do ref)
+        if browser.navegador:
+             browser.navegador.save_screenshot("erro_test_gpm.png")
+             print("- Screenshot de erro salva (erro_test_gpm.png)")
     finally:
+        if browser.navegador: browser.navegador.quit()
         print("=== FIM DO TESTE UNITÁRIO ===")
 
 if __name__ == "__main__":
