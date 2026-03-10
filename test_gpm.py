@@ -52,12 +52,13 @@ def test_gpm_single():
         print("⏳ Esperando carregamento dos filtros...")
         WebDriverWait(browser.navegador, 60).until(EC.presence_of_element_located((By.ID, "data_inicial")))
         
-        # Preenchimento das datas (Padrão do ref: send_keys direto)
+        # Preenchimento das datas via JS (Evita problemas com a máscara do campo)
         data_str = browser.getDate()
-        browser.navegador.find_element(By.ID, "data_inicial").clear()
-        browser.navegador.find_element(By.ID, "data_inicial").send_keys(data_str)
-        browser.navegador.find_element(By.ID, "data_final").clear()
-        browser.navegador.find_element(By.ID, "data_final").send_keys(data_str)
+        print(f"- Definindo datas via JS: {data_str}")
+        browser.navegador.execute_script(f"document.getElementById('data_inicial').value = '{data_str}';")
+        browser.navegador.execute_script(f"document.getElementById('data_final').value = '{data_str}';")
+        # Dispara o evento de mudança se necessário
+        browser.navegador.execute_script("$('#data_inicial').trigger('change'); $('#data_final').trigger('change');")
         
         print(f"➡️ Submetendo consulta para: {data_str}")
         # Botão de submissão (Padrão do ref com espera e fallback)
