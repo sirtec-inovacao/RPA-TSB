@@ -8,7 +8,7 @@ def test_gpm_single():
     print("=== INICIANDO TESTE UNITÁRIO GPM (REFERÊNCIA: COLETOR) ===")
     
     # Iniciamos com headless=True para o Actions conforme solicitado
-    browser = BrowserGPM(headless=True)
+    browser = BrowserGPM(headless=False)
     
     # FORÇAR DATA FIXA PARA TESTE (Solicitado pelo Usuário)
     browser.getDate = lambda: "05/03/2026" 
@@ -60,8 +60,12 @@ def test_gpm_single():
         browser.navegador.find_element(By.ID, "data_final").send_keys(data_str)
         
         print(f"➡️ Submetendo consulta para: {data_str}")
-        # Botão de submissão (Padrão do ref)
-        browser.navegador.find_element(By.ID, "submit").click()
+        # Botão de submissão (Padrão do ref com espera e fallback)
+        try:
+            WebDriverWait(browser.navegador, 30).until(EC.element_to_be_clickable((By.ID, "submit"))).click()
+        except:
+            # Fallback para o XPATH alternativo se o ID falhar
+            browser.navegador.find_element(By.XPATH, '/html/body/form[5]/div/input').click()
         
         # Espera a tabela carregar (Padrão do ref)
         WebDriverWait(browser.navegador, 60).until(EC.presence_of_element_located((By.ID, "tab_resultados")))
