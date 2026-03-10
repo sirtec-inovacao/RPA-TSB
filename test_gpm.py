@@ -69,15 +69,31 @@ def test_gpm_single():
             browser.navegador.find_element(By.XPATH, '/html/body/form[5]/div/input').click()
         
         # Espera a tabela carregar (Padrão do ref)
+        print("⏳ Aguardando resultados na tabela...")
         WebDriverWait(browser.navegador, 60).until(EC.presence_of_element_located((By.ID, "tab_resultados")))
-        print("✅ Resultados carregados!")
+        
+        # GARANTIA: Espera o "Processing" do Datatables sumir
+        try:
+            WebDriverWait(browser.navegador, 10).until(EC.invisibility_of_element_located((By.ID, "tab_resultados_processing")))
+        except: pass
+
+        # Tenta selecionar "Ver Todos" no Datatables para garantir que todos os dados estejam no DOM
+        print("- Expandindo visualização para 'Todos' os registros (Garantia de exportação)...")
+        try:
+            browser.navegador.execute_script("if($.fn.DataTable.isDataTable('#tab_resultados')) { $('#tab_resultados').DataTable().page.len(-1).draw(); }")
+            time.sleep(5)
+            # DEBUG: Conta linhas
+            rows_count = browser.navegador.execute_script("return $('#tab_resultados tbody tr').length;")
+            print(f"📊 Linhas encontradas na tabela após expansão: {rows_count}")
+        except: pass
+
+        print("✅ Resultados prontos para exportação!")
 
         # EXPORTAÇÃO (Padrão do ref usa clique no botão CSV)
-        # Adaptado para o XPATH correto da consulta turno
         print("💾 Clicando no botão de exportação CSV...")
         try:
-            # Tenta o botão pela classe como o Robô costuma fazer
-            browser.navegador.find_element(By.CLASS_NAME, "buttons-csv").click()
+            # Espera o botão estar clicável
+            WebDriverWait(browser.navegador, 20).until(EC.element_to_be_clickable((By.CLASS_NAME, "buttons-csv"))).click()
         except:
             # Fallback para o XPATH fixo do GPM se disponível
             browser.navegador.find_element(By.XPATH, '//*[@id="tab_resultados_wrapper"]/div[1]/button[4]').click()
