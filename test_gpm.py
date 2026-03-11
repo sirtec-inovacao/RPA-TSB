@@ -89,25 +89,43 @@ def test_gpm_single():
 
         print("✅ Resultados prontos para exportação!")
 
-        # EXPORTAÇÃO (Padrão do ref usa clique no botão CSV)
-        print("💾 Clicando no botão de exportação CSV...")
+        # EXPORTAÇÃO (Agora via Excel conforme solicitado)
+        print("💾 Clicando no botão de exportação EXCEL...")
         try:
-            # Espera o botão estar clicável
-            WebDriverWait(browser.navegador, 20).until(EC.element_to_be_clickable((By.CLASS_NAME, "buttons-csv"))).click()
+            # Espera o botão estar clicável (DataTables standard class)
+            WebDriverWait(browser.navegador, 20).until(EC.element_to_be_clickable((By.CLASS_NAME, "buttons-excel"))).click()
         except:
-            # Fallback para o XPATH fixo do GPM se disponível
-            browser.navegador.find_element(By.XPATH, '//*[@id="tab_resultados_wrapper"]/div[1]/button[4]').click()
+            # Fallback para XPATH se necessário
+            browser.navegador.find_element(By.XPATH, "//a[contains(@class, 'buttons-excel')]").click()
         
         import time
+        import zipfile
         time.sleep(15) # Espera o download concluir
 
         # ORGANIZAÇÃO E RENOMEAÇÃO (Lógica interna do Robô)
-        browser._organizar_arquivos_v5("BA")
+        # Como o robô as vezes descompacta ZIPs ou move arquivos baixados
+        # Vou forçar a verificação do arquivo .xlsx
         
+        # 1. Tenta mover arquivo se ele não foi movido automaticamente
+        for f in os.listdir(path_downloads):
+            if f.endswith('.xlsx') or (f.endswith('.zip') and 'consulta' in f.lower()):
+                 if f.endswith('.zip'):
+                     with zipfile.ZipFile(os.path.join(path_downloads, f), 'r') as zip_ref:
+                         zip_ref.extractall(path_downloads)
+                 
+                 # Procura o arquivo .xlsx extraído ou baixado
+                 for ext_f in os.listdir(path_downloads):
+                     if ext_f.endswith('.xlsx'):
+                         old_p = os.path.join(path_downloads, ext_f)
+                         new_p = os.path.join(path_temp, "consulta turno BA.xlsx")
+                         if os.path.exists(new_p): os.remove(new_p)
+                         shutil.move(old_p, new_p)
+                         print(f"- Arquivo {ext_f} movido para temp.")
+
         # 3. Verifica se o arquivo apareceu na pasta temp
-        esperado = os.path.join(path_temp, "consulta turno BA.csv")
+        esperado = os.path.join(path_temp, "consulta turno BA.xlsx")
         if os.path.exists(esperado):
-            print(f"✅ SUCESSO: Arquivo gerado em {esperado}")
+            print(f"✅ SUCESSO: Arquivo Excel gerado em {esperado}")
             
             # 4. Upload para o Google Drive
             from gsheets import Gsheets
@@ -118,7 +136,9 @@ def test_gpm_single():
                 gs.upload_para_drive(esperado, id_pasta_drive_final)
                 print("✅ SUCESSO: Arquivo enviado para o Google Drive.")
         else:
-            print("❌ FALHA: Arquivo não foi encontrado após download.")
+            # Fallback debug: lista o que tem no downloads
+            print("❌ FALHA: Arquivo Excel não foi encontrado após download.")
+            print(f"- Conteúdo da pasta downloads: {os.listdir(path_downloads)}")
 
     except Exception as e:
         print(f"💥 ERRO DURANTE O TESTE: {e}")

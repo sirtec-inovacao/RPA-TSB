@@ -42,7 +42,7 @@ class BrowserGPM:
         self.options.set_preference("browser.download.dir", os.path.abspath(path_downloads))
         self.options.set_preference("browser.download.useDownloadDir", True)
         self.options.set_preference("browser.download.viewableInternally.enabledTypes", "")
-        self.options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/zip,application/octet-stream,application/csv,text/csv")
+        self.options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/zip,application/octet-stream,application/csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         self.options.set_preference("pdfjs.disabled", True) # Evita abrir PDF no navegador
 
         self.navegador = None
