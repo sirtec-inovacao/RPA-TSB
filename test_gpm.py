@@ -103,27 +103,23 @@ def test_gpm_single():
         time.sleep(15) # Espera o download concluir
 
         # ORGANIZAÇÃO E RENOMEAÇÃO (Lógica interna do Robô)
-        # Como o robô as vezes descompacta ZIPs ou move arquivos baixados
-        # Vou forçar a verificação do arquivo .xlsx
-        
         # 1. Tenta mover arquivo se ele não foi movido automaticamente
         for f in os.listdir(path_downloads):
-            if f.endswith('.xlsx') or (f.endswith('.zip') and 'consulta' in f.lower()):
-                 if f.endswith('.zip'):
-                     with zipfile.ZipFile(os.path.join(path_downloads, f), 'r') as zip_ref:
-                         zip_ref.extractall(path_downloads)
+            # Procura o arquivo .xls (Conforme imagem do usuário)
+            if f.endswith('.xls') or f.endswith('.xlsx'):
+                 # O usuário solicitou deixar a parte de extração comentada
+                 # if f.endswith('.zip') and 'consulta' in f.lower():
+                 #     with zipfile.ZipFile(os.path.join(path_downloads, f), 'r') as zip_ref:
+                 #         zip_ref.extractall(path_downloads)
                  
-                 # Procura o arquivo .xlsx extraído ou baixado
-                 for ext_f in os.listdir(path_downloads):
-                     if ext_f.endswith('.xlsx'):
-                         old_p = os.path.join(path_downloads, ext_f)
-                         new_p = os.path.join(path_temp, "consulta turno BA.xlsx")
-                         if os.path.exists(new_p): os.remove(new_p)
-                         shutil.move(old_p, new_p)
-                         print(f"- Arquivo {ext_f} movido para temp.")
+                 old_p = os.path.join(path_downloads, f)
+                 new_p = os.path.join(path_temp, "consulta turno BA.xls")
+                 if os.path.exists(new_p): os.remove(new_p)
+                 shutil.move(old_p, new_p)
+                 print(f"- Arquivo {f} movido para temp.")
 
         # 3. Verifica se o arquivo apareceu na pasta temp
-        esperado = os.path.join(path_temp, "consulta turno BA.xlsx")
+        esperado = os.path.join(path_temp, "consulta turno BA.xls")
         if os.path.exists(esperado):
             print(f"✅ SUCESSO: Arquivo Excel gerado em {esperado}")
             
