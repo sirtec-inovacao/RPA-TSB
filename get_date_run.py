@@ -26,6 +26,11 @@ def _buscar_data_planilha():
             data_str = valor_celula.split(" ")[0]
             # Convertermos para datetime para garantir que o formato está válido
             data_objeto = datetime.strptime(data_str, "%d/%m/%Y")
+            
+            # --- MODIFICAÇÃO DE TESTE LOCAL ---
+            data_objeto = data_objeto - timedelta(days=1)
+            print(f"- [MODO TESTE LOCAL] Subtraindo 1 dia para validação: {data_objeto.strftime('%d/%m/%Y')}")
+            
             return data_objeto
         else:
             print(f"# ALERTA: A célula de data ({celula_data_controle}) no Google Sheets está vazia.")

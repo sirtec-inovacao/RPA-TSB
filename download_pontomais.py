@@ -248,17 +248,31 @@ class Pontomais:
         self.options.add_argument('--force-device-scale-factor=0.67')
         self.options.add_argument("--log-level=3")
         
+        # --- BLOCO DE TESTE: DESCOMENTAR SE O CHROME BLOQUEAR O DOWNLOAD LOCALMENTE ---
+        #self.options.add_argument("--safebrowsing-disable-download-protection")
+        #self.options.add_argument("--safebrowsing-disable-extension-blacklist")
+        #self.options.add_argument("--disable-features=InsecureDownloadWarnings")
+        #self.options.add_argument("--allow-insecure-localhost")
+        #self.options.add_argument("--ignore-certificate-errors")
+        #self.options.add_argument("--allow-running-insecure-content")
+        #self.options.add_argument("--unsafely-treat-insecure-origin-as-secure=https://app2.pontomais.com.br")
+        # ---------------------------------------------------------------------------
+
         # Agrupando os excludeSwitches
         self.options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         self.options.add_experimental_option('detach', True)
 
-        self.download_dir = os.path.expanduser("~/Downloads")
+        self.download_dir = os.path.join(os.getcwd(), "temp_downloads")
         os.makedirs(self.download_dir, exist_ok=True)
         prefs = {
             "download.default_directory": self.download_dir,
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
-            "safebrowsing.enabled": True,
+            "safebrowsing.enabled": True, #True para produção
+            #"safebrowsing.disable_download_protection": True,
+            #"profile.default_content_setting_values.automatic_downloads": 1,
+            #"profile.content_settings.exceptions.automatic_downloads.*.setting": 1,
+            #"download.extensions_to_open": "xlsx",
             "profile.default_content_settings.popups": 0
         }
         self.options.add_experimental_option("prefs", prefs)

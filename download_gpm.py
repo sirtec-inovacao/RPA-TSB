@@ -56,7 +56,8 @@ class BrowserGPM:
             self.janela_web_atual = self.navegador.current_window_handle
             
         print(f"- Acessando página web: {destino}")
-        self.navegador.get(destino)  
+        self.navegador.get(destino)
+        sleep(2)
 
     def _fechar_chrome(self):
         if self.navegador:
@@ -147,11 +148,11 @@ class BrowserGPM:
         print(f"- Iniciando download do consulta turno para operação {operacao}")
         
         if operacao == 'BA':
-            consulta_url = 'https://sirtecba.gpm.srv.br/gpm/geral/consulta_turno.php'
+            consulta_url = 'https://sirtecba.gpm.srv.br/#GR412'
             login_gpm = os.getenv('LOGIN_GPM_BA') or os.getenv('LOGIN_GPM')
             senha_gpm = os.getenv('PASSWORD_GPM_BA') or os.getenv('SENHA_GPM_BA') or os.getenv('SENHA_GPM')
         elif operacao == 'CE':
-            consulta_url = 'https://sirtecce.gpm.srv.br/gpm/geral/consulta_turno.php'
+            consulta_url = 'https://sirtecce.gpm.srv.br/#GR412'
             login_gpm = os.getenv('LOGIN_GPM_CE') or os.getenv('LOGIN_GPM')
             senha_gpm = os.getenv('PASSWORD_GPM_CE') or os.getenv('SENHA_GPM_CE') or os.getenv('SENHA_GPM')
         else:
@@ -169,44 +170,101 @@ class BrowserGPM:
 
         self._navegar(login_url)
         self._logar_gpm(login_gpm, senha_gpm)
-        self._navegar(consulta_url)
         
-        # AGUARDA O CARREGAMENTO DOS FILTROS (Novo)
-        print("- Aguardando campos de filtro ficarem prontos...")
+        print(f"- Navegando para a consulta via hash: {consulta_url}")
+        self.navegador.execute_script(f"window.location.hash = '#GR412';")
+        
+        # AGUARDA O CARREGAMENTO DOS FILTROS (Novo Layout)
+        print("- Localizando frame da consulta...")
+        def switch_to_correct_frame():
+            self.navegador.switch_to.default_content()
+            if self.navegador.find_elements(By.XPATH, "//input[contains(@placeholder,'Data Inicial')]"):
+                return True
+            iframes = self.navegador.find_elements(By.TAG_NAME, "iframe")
+            for frame in iframes:
+                try:
+                    self.navegador.switch_to.frame(frame)
+                    if self.navegador.find_elements(By.XPATH, "//input[contains(@placeholder,'Data Inicial')]"):
+                        return True
+                except: pass
+                self.navegador.switch_to.default_content()
+            return False
+
+        if not switch_to_correct_frame():
+            sleep(5)
+            if not switch_to_correct_frame():
+                print(f"# ERRO: Página de consulta ou iframe não encontrado.")
+                return
+        
+        # PREENCHIMENTO DE DATAS (NOVO LAYOUT FLATPICKR)
+        data_str = self.getDate() # DD/MM/YYYY
+        # ISO para flatpickr (mais confiável via JS)
         try:
-            WebDriverWait(self.navegador, 30).until(
-                EC.presence_of_element_located((By.ID, "data_inicial"))
+            data_iso = datetime.strptime(data_str, "%d/%m/%Y").strftime("%Y-%m-%d")
+        except:
+            data_iso = data_str
+
+        print(f"- Definindo datas: {data_str} (ISO: {data_iso})")
+        
+        def set_date_via_typing(placeholder_part, value, iso_val):
+            try:
+                # Seletor mais amplo para placeholder (ignora case)
+                xpath = f"//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{placeholder_part.lower()}')]"
+                el = WebDriverWait(self.navegador, 15).until(
+                    EC.presence_of_element_located((By.XPATH, xpath))
+                )
+                # Remove readonly
+                self.navegador.execute_script("arguments[0].removeAttribute('readonly');", el)
+                
+                # Tenta via Flatpickr API primeiro (é o mais garantido no Falconer)
+                success_js = self.navegador.execute_script(f"""
+                    var el = arguments[0];
+                    if (el._flatpickr) {{
+                        el._flatpickr.setDate('{iso_val}', true);
+                        return true;
+                    }}
+                    return false;
+                """, el)
+                
+                if not success_js:
+                    el.click()
+                    el.clear()
+                    el.send_keys(value)
+                    el.send_keys("\t") 
+                    self.navegador.execute_script("arguments[0].dispatchEvent(new Event('change')); arguments[0].dispatchEvent(new Event('blur'));", el)
+                return True
+            except:
+                return False
+
+        r1 = set_date_via_typing('Inicial', data_str, data_iso)
+        r2 = set_date_via_typing('Final', data_str, data_iso)
+        
+        if not (r1 and r2):
+            print("⚠️ Aviso: Falha parcial na aplicação de datas. Verificando fallbacks...")
+            # Fallback 2: JS Direto via classe flatpickr-input
+            js_fallback = f"""
+                var inputs = document.querySelectorAll('.flatpickr-input');
+                if (inputs.length >= 2) {{
+                    if(inputs[0]._flatpickr) inputs[0]._flatpickr.setDate('{data_iso}', true);
+                    if(inputs[1]._flatpickr) inputs[1]._flatpickr.setDate('{data_iso}', true);
+                }}
+            """
+            self.navegador.execute_script(js_fallback)
+
+        # CLIQUE NO BOTÃO PESQUISAR
+        print("- Clicando em Pesquisar...")
+        try:
+            # Tenta clicar no botão azul "Pesquisar"
+            btn_pesquisar = WebDriverWait(self.navegador, 30).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Pesquisar')]"))
             )
-        except Exception as e:
-            print(f"# ERRO: Campos de data não carregaram na página de consulta: {e}")
-            # Se não carregou o filtro, não adianta continuar
-            return
-
-        # DIGITAÇÃO HUMANA: Evita bloqueios de locale e aciona gatilhos do GPM
-        data_str = self.getDate()
-        print(f"- Simulando digitação humana das datas: {data_str}")
-        
-        def digitar_humanizado(element_id, texto):
-            el = self.navegador.find_element(By.ID, element_id)
-            el.click()
-            el.clear()
-            sleep(0.5)
-            for char in texto:
-                el.send_keys(char)
-                sleep(0.1) # Delay entre caracteres
-            sleep(0.5)
-            el.send_keys(Keys.TAB) # Sai do campo para acionar eventos
-
-        try:
-            from selenium.webdriver.common.keys import Keys
-            digitar_humanizado("data_inicial", data_str)
-            digitar_humanizado("data_final", data_str)
-        except Exception as e:
-            print(f"# Erro na digitação humana, tentando fallback JS: {e}")
-            self.navegador.execute_script(f"document.getElementById('data_inicial').value = '{data_str}';")
-            self.navegador.execute_script(f"document.getElementById('data_final').value = '{data_str}';")
-
-        self._click('/html/body/form[5]/div/input')
+            btn_pesquisar.click()
+        except:
+            print("- Falha no botão Pesquisar principal, tentando 'buscar' via ID ou JS...")
+            try:
+                self.navegador.execute_script("document.getElementById('buscar').click();")
+            except:
+                self._click("//button[contains(@class,'btn-primary')]")
         
         print("- Aguardando processamento do GPM (vão de loading)...")
         # Aguarda o overlay de "Processing..." sumir
@@ -240,23 +298,26 @@ class BrowserGPM:
         except Exception as e:
             print(f"- [DEBUG VISUAL] Erro ao ler tabela: {e}")
 
-        # TENTATIVA DE EXPORTAÇÃO DINÂMICA
-        print("- Localizando botão de exportação CSV via classe...")
+        # TENTATIVA DE EXPORTAÇÃO (Botão Excel/CSV Padrão)
+        print("- Localizando botão de exportação 'Excel/CSV Padrão'...")
         exportou_sucesso = False
         try:
-            btn_csv = self.navegador.find_element(By.CLASS_NAME, "buttons-csv")
-            btn_csv.click()
-            print("- Clique no botão .buttons-csv realizado.")
+            # O seletor XPath mais robusto para este botão verde
+            btn_export = WebDriverWait(self.navegador, 40).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Excel/CSV Padrão')]"))
+            )
+            btn_export.click()
+            print("- Clique no botão 'Excel/CSV Padrão' realizado.")
             exportou_sucesso = True
-            sleep(15)
-        except:
-            print("- Botão .buttons-csv não encontrado. Tentando clique por índice antigo...")
+            sleep(20) # Tempo maior para o download do ZIP
+        except Exception as e:
+            print(f"- Botão principal falhou ({e}). Tentando alternativas...")
             try:
-                self._click('//*[@id="tab_resultados_wrapper"]/div[1]/button[4]')
+                self.navegador.execute_script("document.querySelector('button.btn-success').click();")
                 exportou_sucesso = True
-                sleep(15)
+                sleep(20)
             except:
-                print("- Falha em todos os métodos de clique de exportação.")
+                print("- Falha em todos os métodos de exportação principal.")
 
         # PLANO DE CONTINGÊNCIA: SCRAPING DIRETO DA TELA (Caso o export do site falhe no GitHub)
         if tabela_com_dados:
@@ -299,21 +360,26 @@ class BrowserGPM:
         if zip_files:
             for zip_name in zip_files:
                 zip_path = os.path.join(path_downloads, zip_name)
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    zip_ref.extractall(path_downloads)
-                
-                print(f"- Arquivo {zip_path} descompactado")
-                
-                extracted_files = [f for f in os.listdir(path_downloads) if f.endswith('.csv') and 'SCRAPED' not in f]
-                for ext_file in extracted_files:
-                    old_path = os.path.join(path_downloads, ext_file)
-                    new_filename = f"consulta turno {operacao}.csv"
-                    new_path = os.path.join(path_temp, new_filename)
-                    shutil.move(old_path, new_path)
-                    print(f"- Arquivo renomeado e movido para {new_path}")
-                
-                os.remove(zip_path)
-                print(f"- Arquivo {zip_name} removido com sucesso!")
+                try:
+                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                        zip_ref.extractall(path_downloads)
+                    print(f"- Arquivo {zip_path} descompactado")
+                    
+                    # Procura por CSV, XLS ou XLSX extraídos
+                    extracted_files = [f for f in os.listdir(path_downloads) if (f.endswith('.csv') or f.endswith('.xls') or f.endswith('.xlsx')) and 'SCRAPED' not in f]
+                    for ext_file in extracted_files:
+                        old_path = os.path.join(path_downloads, ext_file)
+                        new_filename = f"consulta turno {operacao}.{'xls' if ext_file.endswith('.xls') else ('xlsx' if ext_file.endswith('.xlsx') else 'csv')}"
+                        new_path = os.path.join(path_temp, new_filename)
+                        
+                        if os.path.exists(new_path): os.remove(new_path)
+                        shutil.move(old_path, new_path)
+                        print(f"- Arquivo extraído renomeado e movido para {new_path}")
+                    
+                    os.remove(zip_path)
+                    print(f"- Arquivo ZIP {zip_name} removido.")
+                except Exception as e:
+                    print(f"# Erro ao processar ZIP {zip_name}: {e}")
         
         # Caso especial: Se não veio ZIP ou se o CSV veio vazio, usamos o BACKUP de scraping
         backup_file = f"SCRAPED_BACKUP_{operacao}.csv"

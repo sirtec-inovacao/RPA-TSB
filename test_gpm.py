@@ -3,6 +3,8 @@ from download_gpm import BrowserGPM
 from get_date_run import writeDate
 from auxiliar import path_temp, path_downloads
 import shutil
+import time
+from time import sleep
 
 def test_gpm_single():
     print("=== INICIANDO TESTE UNITÁRIO GPM (REFERÊNCIA: COLETOR) ===")
@@ -45,28 +47,111 @@ def test_gpm_single():
         WebDriverWait(browser.navegador, 60).until(EC.presence_of_element_located((By.XPATH, '/html/body/div[1]')))
         print("✅ Login realizado com sucesso!")
 
-        # NAVEGAÇÃO PARA CONSULTA TURNO
-        consulta_url = "https://sirtecba.gpm.srv.br/gpm/geral/consulta_turno.php"
-        browser._navegar(consulta_url)
-        
-        print("⏳ Esperando carregamento dos filtros...")
-        WebDriverWait(browser.navegador, 60).until(EC.presence_of_element_located((By.ID, "data_inicial")))
-        
-        # Preenchimento das datas via JS (Evita problemas com a máscara do campo)
-        data_str = browser.getDate()
-        print(f"- Definindo datas via JS: {data_str}")
-        browser.navegador.execute_script(f"document.getElementById('data_inicial').value = '{data_str}';")
-        browser.navegador.execute_script(f"document.getElementById('data_final').value = '{data_str}';")
-        # Dispara o evento de mudança se necessário
-        browser.navegador.execute_script("$('#data_inicial').trigger('change'); $('#data_final').trigger('change');")
-        
-        print(f"➡️ Submetendo consulta para: {data_str}")
-        # Botão de submissão (Padrão do ref com espera e fallback)
+        # NAVEGAÇÃO PARA CONSULTA TURNO (NOVO LAYOUT VIA PESQUISA)
+        print("- Pesquisando por 'Consulta Turno' no menu Falconer...")
         try:
-            WebDriverWait(browser.navegador, 30).until(EC.element_to_be_clickable((By.ID, "submit"))).click()
+            # 1. Abre a barra de pesquisa
+            search_input = WebDriverWait(browser.navegador, 30).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "input.typeahead, input[placeholder*='Pesquisar']"))
+            )
+            search_input.click()
+            search_input.clear()
+            search_input.send_keys("Consulta Turno")
+            sleep(2)
+            
+            # 2. Clica no item da lista de resultados
+            # O sistema Falconer costuma ter uma div com classe 'tt-suggestion' ou similar
+            item_menu = WebDriverWait(browser.navegador, 30).until(
+                EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Consulta Turno')] | //div[contains(text(), 'Consulta Turno')]"))
+            )
+            item_menu.click()
+            print("✅ Navegação via pesquisa concluída com sucesso.")
+            sleep(5)
+        except Exception as e:
+            print(f"- Aviso: Falha na navegação via pesquisa ({e}). Tentando hash direto...")
+            browser.navegador.execute_script("window.location.hash = '#GR412';")
+            browser.navegador.refresh()
+            sleep(5)
+        
+        print("⏳ Esperando carregamento dos filtros (Novo Layout)...")
+        # Falconer usa iframes para módulos. Precisamos encontrar em qual frame os campos estão.
+        def switch_to_filter_frame():
+            browser.navegador.switch_to.default_content()
+            if browser.navegador.find_elements(By.XPATH, "//input[contains(@placeholder, 'Data Inicial')]"):
+                return True # Já estamos no contexto certo
+            
+            iframes = browser.navegador.find_elements(By.TAG_NAME, "iframe")
+            print(f"- Analisando {len(iframes)} iframes em busca dos filtros...")
+            for i, frame in enumerate(iframes):
+                try:
+                    browser.navegador.switch_to.frame(frame)
+                    if browser.navegador.find_elements(By.XPATH, "//input[contains(@placeholder, 'Data Inicial')]") or \
+                       browser.navegador.find_elements(By.CLASS_NAME, "flatpickr-input"):
+                        print(f"✅ Filtros encontrados no iframe {i}.")
+                        return True
+                except:
+                    pass
+                browser.navegador.switch_to.default_content()
+            return False
+
+        if not switch_to_filter_frame():
+            print("⚠️ Aviso: Não consegui localizar os filtros nos frames padrão. Tentando aguardar mais...")
+            sleep(5)
+            switch_to_filter_frame()
+        
+        # Preenchimento das datas (Removendo readonly + Flatpickr API)
+        data_str = browser.getDate() # DD/MM/YYYY
+        try:
+            data_iso = time.strftime("%Y-%m-%d", time.strptime(data_str, "%d/%m/%Y"))
         except:
-            # Fallback para o XPATH alternativo se o ID falhar
-            browser.navegador.find_element(By.XPATH, '/html/body/form[5]/div/input').click()
+            data_iso = data_str
+            
+        print(f"- Definindo datas: {data_str} (ISO: {data_iso})")
+        
+        def set_date_test(placeholder_part, value, iso_val):
+            try:
+                xpath = f"//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{placeholder_part.lower()}')]"
+                el = WebDriverWait(browser.navegador, 15).until(EC.presence_of_element_located((By.XPATH, xpath)))
+                browser.navegador.execute_script("arguments[0].removeAttribute('readonly');", el)
+                
+                # Prioridade: Flatpickr API
+                success = browser.navegador.execute_script(f"""
+                    var el = arguments[0];
+                    if (el._flatpickr) {{
+                        el._flatpickr.setDate('{iso_val}', true);
+                        return true;
+                    }}
+                    return false;
+                """, el)
+                
+                if not success:
+                    el.click()
+                    el.clear()
+                    el.send_keys(value)
+                    el.send_keys("\t")
+                    browser.navegador.execute_script("arguments[0].dispatchEvent(new Event('change'));", el)
+                return True
+            except:
+                return False
+
+        set_date_test('Inicial', data_str, data_iso)
+        set_date_test('Final', data_str, data_iso)
+        
+        # Tirar screenshot dos filtros preenchidos
+        browser.navegador.save_screenshot("debug_passo_1_filtros.png")
+        
+        print(f"➡️ Submetendo consulta (Botão Pesquisar)...")
+        try:
+            btn_pesquisar = WebDriverWait(browser.navegador, 30).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Pesquisar')]"))
+            )
+            btn_pesquisar.click()
+        except Exception as e:
+            print(f"- Aviso: Falha ao clicar em 'Pesquisar' via XPATH: {e}. Tentando via ID 'buscar'...")
+            browser.navegador.execute_script("document.getElementById('buscar').click();")
+        
+        sleep(5)
+        browser.navegador.save_screenshot("debug_passo_2_apos_pesquisa.png")
         
         # Espera a tabela carregar (Padrão do ref)
         print("⏳ Aguardando resultados na tabela...")
@@ -78,50 +163,69 @@ def test_gpm_single():
         except: pass
 
         # Tenta selecionar "Ver Todos" no Datatables para garantir que todos os dados estejam no DOM
-        print("- Expandindo visualização para 'Todos' os registros (Garantia de exportação)...")
+        print("- Expandindo visualização para 'Todos' os registros...")
         try:
+            # Tenta via API do DataTable
             browser.navegador.execute_script("if($.fn.DataTable.isDataTable('#tab_resultados')) { $('#tab_resultados').DataTable().page.len(-1).draw(); }")
-            time.sleep(5)
-            # DEBUG: Conta linhas
-            rows_count = browser.navegador.execute_script("return $('#tab_resultados tbody tr').length;")
-            print(f"📊 Linhas encontradas na tabela após expansão: {rows_count}")
+            sleep(4)
         except: pass
+        
+        # Conta linhas reais (tbody tr)
+        rows_count = browser.navegador.execute_script("return $('#tab_resultados tbody tr').filter(function() { return $(this).text().trim() != ''; }).length;")
+        # Se for 1 e o texto for "Nenhum registro encontrado" ou similar
+        if rows_count == 1:
+            first_row_text = browser.navegador.execute_script("return $('#tab_resultados tbody tr').text().toLowerCase();")
+            if "nenhum" in first_row_text or "não encontrado" in first_row_text:
+                rows_count = 0
+        
+        print(f"📊 Registros identificados na tabela: {rows_count}")
 
         print("✅ Resultados prontos para exportação!")
 
         # EXPORTAÇÃO (Agora via Excel conforme solicitado)
-        print("💾 Clicando no botão de exportação EXCEL...")
+        # EXPORTAÇÃO (Botão Verde: Excel/CSV Padrão)
+        print("💾 Clicando no botão 'Excel/CSV Padrão'...")
         try:
-            # Espera o botão estar clicável (DataTables standard class)
-            WebDriverWait(browser.navegador, 20).until(EC.element_to_be_clickable((By.CLASS_NAME, "buttons-excel"))).click()
-        except:
-            # Fallback para XPATH se necessário
-            browser.navegador.find_element(By.XPATH, "//a[contains(@class, 'buttons-excel')]").click()
+            btn_export = WebDriverWait(browser.navegador, 40).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Excel/CSV Padrão')]"))
+            )
+            btn_export.click()
+        except Exception as e:
+            print(f"- Aviso: Falha no botão principal, tentando seletor alternativo: {e}")
+            browser.navegador.execute_script("document.querySelector('.btn-success').click();")
         
-        import time
+        # ORGANIZAÇÃO E RENOMEAÇÃO (Lógica idêntica ao download_gpm.py)
         import zipfile
-        time.sleep(15) # Espera o download concluir
+        files = os.listdir(path_downloads)
+        
+        # 1. Trata ZIPs (O botão Padrão costuma baixar ZIP no novo layout)
+        for f in files:
+            if f.endswith('.zip') and 'consulta' in f.lower():
+                zip_path = os.path.join(path_downloads, f)
+                try:
+                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                        zip_ref.extractall(path_downloads)
+                    print(f"- ZIP {f} descompactado com sucesso.")
+                    os.remove(zip_path)
+                except Exception as e:
+                    print(f"# Erro ao descompactar ZIP: {e}")
 
-        # ORGANIZAÇÃO E RENOMEAÇÃO (Lógica interna do Robô)
-        # 1. Tenta mover arquivo se ele não foi movido automaticamente
+        # 2. Busca o arquivo final (mais flexível com extensões)
         for f in os.listdir(path_downloads):
-            # Procura o arquivo .xls (Conforme imagem do usuário)
-            if f.endswith('.xls') or f.endswith('.xlsx'):
-                 # O usuário solicitou deixar a parte de extração comentada
-                 # if f.endswith('.zip') and 'consulta' in f.lower():
-                 #     with zipfile.ZipFile(os.path.join(path_downloads, f), 'r') as zip_ref:
-                 #         zip_ref.extractall(path_downloads)
-                 
-                 old_p = os.path.join(path_downloads, f)
-                 new_p = os.path.join(path_temp, "consulta turno BA.xls")
-                 if os.path.exists(new_p): os.remove(new_p)
-                 shutil.move(old_p, new_p)
-                 print(f"- Arquivo {f} movido para temp.")
+            if (f.endswith('.xls') or f.endswith('.xlsx') or f.endswith('.csv')) and 'SCRAPED' not in f:
+                old_p = os.path.join(path_downloads, f)
+                ext = f.split('.')[-1]
+                new_p = os.path.join(path_temp, f"consulta turno BA.{ext}")
+                
+                if os.path.exists(new_p): os.remove(new_p)
+                shutil.move(old_p, new_p)
+                print(f"- Arquivo {f} movido para temp como consulta turno BA.{ext}")
 
-        # 3. Verifica se o arquivo apareceu na pasta temp
-        esperado = os.path.join(path_temp, "consulta turno BA.xls")
-        if os.path.exists(esperado):
-            print(f"✅ SUCESSO: Arquivo Excel gerado em {esperado}")
+        # 3. Verifica se o arquivo apareceu na pasta temp (qualquer extensão)
+        arquivos_temp = [f for f in os.listdir(path_temp) if f.startswith("consulta turno BA")]
+        if arquivos_temp:
+            esperado = os.path.join(path_temp, arquivos_temp[0])
+            print(f"✅ SUCESSO: Arquivo encontrado em {esperado}")
             
             # 4. Upload para o Google Drive
             from gsheets import Gsheets
@@ -133,8 +237,9 @@ def test_gpm_single():
                 print("✅ SUCESSO: Arquivo enviado para o Google Drive.")
         else:
             # Fallback debug: lista o que tem no downloads
-            print("❌ FALHA: Arquivo Excel não foi encontrado após download.")
+            print("❌ FALHA: Arquivo Excel/CSV não foi encontrado após download.")
             print(f"- Conteúdo da pasta downloads: {os.listdir(path_downloads)}")
+            print(f"- Conteúdo da pasta temp: {os.listdir(path_temp)}")
 
     except Exception as e:
         print(f"💥 ERRO DURANTE O TESTE: {e}")
