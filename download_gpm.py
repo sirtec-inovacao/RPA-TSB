@@ -437,5 +437,4 @@ class BrowserGPM:
                     except:
                         pass
 
-# Alias de compatibilidade para o main.py antigo
 Chrome = BrowserGPM
