@@ -3,11 +3,12 @@ import json
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import traceback
 import time
+import io
 from auxiliar import l
 
 # Importa as variáveis de configuração globais do arquivo Auxiliar.py
@@ -186,3 +187,55 @@ class Gsheets:
         except Exception as e:
             print(f"# Erro ao ler a célula {celula} da aba 'access': {e}")
             return None
+
+            ##TESTE AQUI
+
+    def download_do_drive(self, nome_arquivo, id_pasta_drive, caminho_destino):
+        """
+        Busca um arquivo no Drive pelo nome dentro de uma pasta e o baixa localmente.
+        
+        Parâmetros:
+            nome_arquivo (str): O nome exato do arquivo no Drive.
+            id_pasta_drive (str): O ID da pasta onde o arquivo está localizado.
+            caminho_destino (str): O caminho local completo onde o arquivo será salvo.
+        """
+        if not self.servico_drive:
+            print('# Conexão com Drive não disponível. Download cancelado.')
+            return False
+
+        try:
+            # 1. Procura pelo arquivo na pasta especificada
+            query = f"name='{nome_arquivo}' and '{id_pasta_drive}' in parents and trashed=false"
+            response = self.servico_drive.files().list(
+                q=query,
+                spaces='drive',
+                fields='files(id, name)',
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True
+            ).execute()
+            
+            files = response.get('files', [])
+            
+            if not files:
+                print(f"# Aviso: Arquivo '{nome_arquivo}' não encontrado na pasta do Drive ({id_pasta_drive}).")
+                return False
+            
+            file_id = files[0].get('id')
+            print(f"- Iniciando download do arquivo '{nome_arquivo}' (ID: {file_id})...")
+
+            # 2. Executa o download por chunks para maior segurança com arquivos grandes
+            request = self.servico_drive.files().get_media(fileId=file_id)
+            with io.FileIO(caminho_destino, 'wb') as fh:
+                downloader = MediaIoBaseDownload(fh, request)
+                done = False
+                while done is False:
+                    status, done = downloader.next_chunk()
+                    # print(f"Download {int(status.progress() * 100)}%.")
+
+            print(f"✅ Download do arquivo '{nome_arquivo}' realizado com sucesso em: {caminho_destino}")
+            return True
+
+        except Exception as e:
+            print(f'# Erro durante o download do Drive: {e}')
+            # traceback.print_exc()
+            return False
