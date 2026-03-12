@@ -1,23 +1,18 @@
-# Ambientes Virtuais
 .venv/
 venv/
 __pycache__/
 *.pyc
 
-# Arquivos de Credenciais e Variáveis Locais (MUITO IMPORTANTE)
 .env
 chaveGoogle.json
 test_gpm.py
 
-# Arquivos de Imagem / Debug
 *.png
 *.jpg
 
-# Pastas de Processamento
 temp/
 temp_downloads/
 final/
 
-# Arquivos do Sistema Operacional
 .DS_Store
 Thumbs.db

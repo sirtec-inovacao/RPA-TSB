@@ -29,7 +29,7 @@ path_final = os.path.join(path_script, "final")
 
 # Arquivos de Configuração
 chave_json = os.path.join(path_script, "chaveGoogle.json")
-config_json = os.path.join(path_script, "config.json")
+#config_json = os.path.join(path_script, "config.json")
 
 # Arquivos Temporários / Processamento
 records_file = os.path.join(path_temp, "records.json")
