@@ -1,7 +1,10 @@
 name: Robô TSB
 
-on:
+on:  
+  schedule:
+    - cron: '0 7 * * *'
   workflow_dispatch: #Permite rodar manualmente clicando num botão no GitHub
+      
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
