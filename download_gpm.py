@@ -173,6 +173,8 @@ class BrowserGPM:
         
         print(f"- Navegando para a consulta via hash: {consulta_url}")
         self.navegador.execute_script(f"window.location.hash = '#GR412';")
+        self.navegador.refresh() # Crucial para forçar o carregamento do módulo no Firefox Headless
+        sleep(5)
         
         # AGUARDA O CARREGAMENTO DOS FILTROS (Novo Layout)
         print("- Localizando frame da consulta...")
@@ -180,17 +182,23 @@ class BrowserGPM:
             self.navegador.switch_to.default_content()
             if self.navegador.find_elements(By.XPATH, "//input[contains(@placeholder,'Data Inicial')]"):
                 return True
+            
             iframes = self.navegador.find_elements(By.TAG_NAME, "iframe")
-            for frame in iframes:
+            print(f"- Analisando {len(iframes)} iframes em busca dos filtros...")
+            for i, frame in enumerate(iframes):
                 try:
                     self.navegador.switch_to.frame(frame)
-                    if self.navegador.find_elements(By.XPATH, "//input[contains(@placeholder,'Data Inicial')]"):
+                    # Verifica tanto o placeholder quanto a classe do Flatpickr
+                    if self.navegador.find_elements(By.XPATH, "//input[contains(@placeholder,'Data Inicial')]") or \
+                       self.navegador.find_elements(By.CLASS_NAME, "flatpickr-input"):
+                        print(f"- Filtros encontrados no iframe {i}.")
                         return True
                 except: pass
                 self.navegador.switch_to.default_content()
             return False
 
         if not switch_to_correct_frame():
+            print("- Segunda tentativa de localização de frame...")
             sleep(5)
             if not switch_to_correct_frame():
                 print(f"# ERRO: Página de consulta ou iframe não encontrado.")
