@@ -19,9 +19,9 @@ gsheets = Gsheets()
 
 # --- DADOS DE LOGIN ---
 operacao_login = {
-    # 'BAR':      gsheets.pegar_celula_gsheets('B21'),
-    # 'BJL':      gsheets.pegar_celula_gsheets('B22'),
-    # 'FRS':      gsheets.pegar_celula_gsheets('B24'), 
+    'BAR':      gsheets.pegar_celula_gsheets('B21'),
+    'BJL':      gsheets.pegar_celula_gsheets('B22'),
+    'FRS':      gsheets.pegar_celula_gsheets('B24'), 
     'PEL':      gsheets.pegar_celula_gsheets('B25'),  
     'POA':      gsheets.pegar_celula_gsheets('B26'),
     'RS':       gsheets.pegar_celula_gsheets('B27'),            
