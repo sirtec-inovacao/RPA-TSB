@@ -197,24 +197,24 @@ def process_consulta_turno_files(path_temp, pontomais_df, operacao):
             consulta_turno_df['primeiro_nome'] = consulta_turno_df['parceiros'].apply(extrair_primeiro_nome)
             
             # Encontrar o menor horário de ponto batido por um membro da equipe
-            df_parceiros = loc_menor_entrada_pontomais()
+            df_parceiros_resumo = loc_menor_entrada_pontomais()
             
-            # Garantir que as colunas de junção estejam no mesmo formato (upper/strip)
-            df_parceiros['parceiro_1_search'] = df_parceiros['parceiro_1'].astype(str).str.strip().str.upper()
-            
-            # Juntar DataFrames
-            consulta_turno_df = consulta_turno_df.merge(
-                df_parceiros[['parceiro_1_search', 'menor_tempo']],
-                how='left',
-                left_on='primeiro_nome',
-                right_on='parceiro_1_search'
-            )
-            
-            # Renomear a coluna 'menor_tempo' para 'hora_pontomais'
-            consulta_turno_df.rename(columns={'menor_tempo': 'hora_pontomais'}, inplace=True)
-            
-            # Remover a coluna auxiliar
-            consulta_turno_df.drop(columns=['parceiro_1_search'], inplace=True)
+            if not df_parceiros_resumo.empty:
+                # Garantir que o ID seja do mesmo tipo para o merge (string ou float)
+                consulta_turno_df['id'] = consulta_turno_df['id'].astype(str)
+                df_parceiros_resumo['id'] = df_parceiros_resumo['id'].astype(str)
+
+                # Juntar DataFrames usando o 'id' que é único por turno
+                consulta_turno_df = consulta_turno_df.merge(
+                    df_parceiros_resumo[['id', 'menor_tempo']],
+                    on='id',
+                    how='left'
+                )
+                
+                # Renomear a coluna 'menor_tempo' para 'hora_pontomais'
+                consulta_turno_df.rename(columns={'menor_tempo': 'hora_pontomais'}, inplace=True)
+            else:
+                consulta_turno_df['hora_pontomais'] = None
 
             # Criar a coluna 'date_hour_pontomais' que é a concatenação das colunas 'Data' e 'hora_pontomais'
             consulta_turno_df['date_hour_pontomais'] = consulta_turno_df['data'].astype(str) + ' ' + consulta_turno_df['hora_pontomais'].astype(str)
@@ -352,31 +352,44 @@ def criar_dataframe(diretorio, comeca_com, termina_com):
     
 def loc_menor_entrada_pontomais():
 
+    # Verifica se o arquivo de ponto existe
+    if not os.path.exists(pontomais_df):
+        print(f"# AVISO: {pontomais_df} não encontrado. Não será possível cruzar dados de ponto.")
+        return pd.DataFrame()
+
+    df_pontomais_final = criar_dataframe(path_temp, 'Pontomais_final', '.xlsx')
+    
+    # DEBUG: Mostrar nomes no arquivo de ponto para verificar formato
+    if not df_pontomais_final.empty:
+        print(f"--- [DEBUG] Nomes no Pontomais_final (Amostra): {df_pontomais_final['Nome'].unique()[:5].tolist()}")
+    
+    df_consulta_turno = criar_dataframe(path_temp, 'consulta turno', '.csv')
+
+    if df_pontomais_final.empty or df_consulta_turno.empty:
+        print("# AVISO: Dados de ponto ou turnos vazios. Abortando loc_menor_entrada_pontomais.")
+        return pd.DataFrame()
+
     # Função para encontrar a primeira entrada correspondente ao primeiro nome na coluna 'Nome' do arquivo "Pontomais_final.xlsx"
     def encontrar_primeira_entrada(nome):
         if isinstance(nome, str):
             nome_search = nome.strip().upper()
             # Filtra o dataframe usando comparação robusta
-            match = df_pontomais_final[df_pontomais_final['Nome'].str.strip().str.upper() == nome_search]['1ª Entrada']
-            return match.iloc[0] if not match.empty else None
+            valid_names = df_pontomais_final['Nome'].str.strip().str.upper()
+            match = df_pontomais_final[valid_names == nome_search]['1ª Entrada']
+            
+            if not match.empty:
+                # print(f"--- [DEBUG] Match encontrado para: {nome_search} -> {match.iloc[0]}")
+                return match.iloc[0]
+            # else:
+            #     print(f"--- [DEBUG] Nome não encontrado no Pontomais: {nome_search}")
         return None
 
-    df_pontomais_final = criar_dataframe(path_temp, 'Pontomais_final', '.xlsx')
-    df_consulta_turno = criar_dataframe(path_temp, 'consulta turno', '.csv')
+    # Mantém o ID para garantir um merge seguro depois
+    df_base = df_consulta_turno[['id', 'parceiros']].copy()
 
-    # Verifica se a coluna '1ª Entrada' existe; se não, cria a coluna com valores nulos
-    if '1ª Entrada' not in df_pontomais_final.columns:
-        df_pontomais_final['1ª Entrada'] = None
-
-    # Verifica se a coluna '1ª Entrada' existe; se não, cria a coluna com valores nulos
-    if '1ª Entrada' not in df_consulta_turno.columns:
-        df_consulta_turno['1ª Entrada'] = None
-
-    df_parceiros = df_consulta_turno['parceiros']
-    df_parceiros = df_consulta_turno.reindex(columns=['parceiros'])
-
-    df_parceiros = df_parceiros['parceiros'].str.split(' - ', expand=True)
+    df_parceiros = df_base['parceiros'].str.split(' - ', expand=True)
     df_parceiros.columns = [f'parceiro_{i+1}' for i in range(df_parceiros.shape[1])]
+    df_parceiros['id'] = df_base['id'] # Reatribui o ID
         
 
     for col in df_parceiros.columns:
