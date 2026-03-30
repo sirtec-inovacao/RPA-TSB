@@ -100,12 +100,12 @@ def main():
                 print(f"\nSUCESSO: Arquivo CE salvo no Drive ({os.path.basename(arquivo_final_ce)})")
             else:
                 print(f"\nERRO: Falha ao salvar arquivo CE no Drive ({os.path.basename(arquivo_final_ce)})")
-        
-        # Atualiza planilha de robos                               
-        gsheets.attsheets(id_planilha_att_gsheet, aba_att_gsheet)
 
         # A data já foi avançada no início da iteração, não precisa chamar writeDate novamente
         print(f'{l}- Dia {data_execucao} concluído com sucesso!{l}')
+
+    # Atualiza planilha de robos (fora do loop, apenas uma vez ao final)                              
+    gsheets.attsheets(id_planilha_att_gsheet, aba_att_gsheet)
 
 def getDate():
     data_raw = getInitialDate()
