@@ -47,8 +47,12 @@ id_pasta_drive_final = os.environ.get("ID_PASTA_DRIVE_FINAL")
 id_planilha_controle = os.environ.get("ID_PLANILHA_CONTROLE") 
 if not id_planilha_controle: id_planilha_controle = "1lM8Q3NIUrDsdR8OD_6RG0wAddXvq1PpWczuOUeOyivE"
 
-nome_aba_controle = os.environ.get("NOME_ABA_CONTROLE") or "CONTROLE_GERAL_ROBOS_TESTE"
-celula_data_controle = os.environ.get("CELULA_DATA_CONTROLE") or "F16"
+# nome_aba_controle = os.environ.get("NOME_ABA_CONTROLE") or "CONTROLE_GERAL_ROBOS_TESTE"
+# celula_data_controle = os.environ.get("CELULA_DATA_CONTROLE") or "F16"
+
+nome_aba_controle = os.environ.get("NOME_ABA_CONTROLE") or "Att_TSB"
+celula_data_controle = os.environ.get("CELULA_DATA_CONTROLE") or "A2"
+
 
 # Sistemas Terceiros
 token_zuq = os.environ.get("TOKEN_ZUQ")
