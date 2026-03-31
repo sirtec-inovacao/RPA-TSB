@@ -287,6 +287,12 @@ def process_vehicle_logs_by_operation(path_temp, operacao, notifications_file):
     # Ler o arquivo "consulta turno" correspondente à operação
     consulta_turno_file = f"consulta turno {operacao}.csv"
     consulta_turno_path = os.path.join(path_temp, consulta_turno_file)
+
+    # Verificar se o arquivo existe (pode não existir se não houve turno no dia)
+    if not os.path.exists(consulta_turno_path):
+        print(f"# AVISO: Arquivo '{consulta_turno_file}' não encontrado. Sem turno para {operacao} neste dia.")
+        return None
+
     consulta_turno_df = pd.read_csv(consulta_turno_path, sep=';', encoding='utf-8-sig')
 
     # Verificar se a coluna 'hour_km_run_pontomais' existe, se não, criar com valores vazios
