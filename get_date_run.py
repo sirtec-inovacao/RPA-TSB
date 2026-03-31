@@ -15,7 +15,8 @@ def writeDate(initial_date, final_date_unused):
         # Converte a data atual para objeto para somar 1 dia
         data_atual = datetime.strptime(initial_date, "%d/%m/%Y")
         proxima_data = data_atual + timedelta(days=1)
-        proxima_data_str = proxima_data.strftime("%d/%m/%Y")
+        hora_atual = datetime.now().strftime("%H:%M:%S")
+        proxima_data_str = f"{proxima_data.strftime('%d/%m/%Y')} {hora_atual}"
         
         # Atualiza a célula correspondente
         aba.update_acell(celula_data_controle, proxima_data_str)

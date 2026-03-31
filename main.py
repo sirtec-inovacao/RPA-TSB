@@ -24,7 +24,7 @@ def main():
     hoje = datetime.now().strftime("%d/%m/%Y")
     hoje_obj = datetime.strptime(hoje, "%d/%m/%Y")
 
-    # Loop para processar dia a dia, do dia seguinte ao da planilha até hoje
+    # Loop para processar dia a dia, a partir do dia da planilha até ontem
     while True:
         # Busca a data atual na planilha de controle
         data_planilha = getDate()
@@ -34,22 +34,15 @@ def main():
             print(f"{l}# ERRO: Falha ao obter a data da planilha. Verifique as credenciais e o ID da planilha.{l}")
             break
 
-        # O dia a ser processado é o SEGUINTE ao que está na planilha
+        # O dia a ser processado é o PRÓPRIO dia da planilha
         data_planilha_obj = datetime.strptime(data_planilha, "%d/%m/%Y")
-        data_execucao_obj = data_planilha_obj + timedelta(days=1)
 
-        # Se o próximo dia a processar já passou de hoje, não há mais datas
-        if data_execucao_obj > hoje_obj:
-            print(f'{l}- Todas as datas foram processadas até hoje ({hoje})! Nenhuma data pendente.{l}')
+        # Se o dia da planilha já é hoje ou posterior, não há mais datas (processa até ontem)
+        if data_planilha_obj >= hoje_obj:
+            print(f'{l}- Todas as datas foram processadas até ontem! Nenhuma data pendente.{l}')
             break
 
-        data_execucao = data_execucao_obj.strftime("%d/%m/%Y")
-        print(f'{t}>>> PROCESSANDO DIA: {data_execucao} (Planilha estava em: {data_planilha}) <<<{t}')
-
-        # Avança a data na planilha ANTES de processar
-        # writeDate soma +1 dia, então a planilha terá a data_execucao
-        # Isso garante que getInitialDate() retorna a data correta nos módulos de download
-        writeDate(data_planilha, data_planilha)
+        print(f'{t}>>> PROCESSANDO DIA: {data_planilha} <<<{t}')
             
         # Remover arquivos antigos
         chrome.limpar_pasta_temp()
@@ -101,8 +94,9 @@ def main():
             else:
                 print(f"\nERRO: Falha ao salvar arquivo CE no Drive ({os.path.basename(arquivo_final_ce)})")
 
-        # A data já foi avançada no início da iteração, não precisa chamar writeDate novamente
-        print(f'{l}- Dia {data_execucao} concluído com sucesso!{l}')
+        # Avança a data na planilha DEPOIS de processar (para o próximo dia)
+        writeDate(data_planilha, data_planilha)
+        print(f'{l}- Dia {data_planilha} concluído com sucesso!{l}')
 
     # Atualiza planilha de robos (fora do loop, apenas uma vez ao final)                              
     gsheets.attsheets(id_planilha_att_gsheet, aba_att_gsheet)
