@@ -21,11 +21,18 @@ web_pontomais = "https://app2.pontomais.com.br/login"
 web_pontomais_relatorios = "https://app2.pontomais.com.br/relatorios"
 
 # --- 3. CAMINHOS E DIRETÓRIOS ---
-# Pastas Base
+# Pasta base da aplicação
 path_script = os.path.dirname(os.path.abspath(__file__))
-path_downloads = os.path.join(os.path.expanduser("~"), "Downloads")
-path_temp = os.path.join(path_script, "temp")
-path_final = os.path.join(path_script, "final")
+path_app    = os.path.join(path_script, "app")
+
+# Subpastas dentro de app/
+path_downloads = os.path.join(path_app, "downloads")   # downloads temporários do browser
+path_temp      = os.path.join(path_app, "temp")         # arquivos intermediários de processamento
+path_final     = os.path.join(path_app, "final")        # arquivos finais prontos para envio
+
+# Garante que todas as pastas existem
+for _pasta in [path_downloads, path_temp, path_final]:
+    os.makedirs(_pasta, exist_ok=True)
 
 # Arquivos de Configuração
 chave_json = os.path.join(path_script, "chaveGoogle.json")

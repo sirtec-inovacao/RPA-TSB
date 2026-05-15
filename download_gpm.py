@@ -138,34 +138,82 @@ class BrowserGPM:
                 os.remove(caminho_arquivo)
                 print(f"- Arquivo {arquivo} removido com sucesso!")
 
-    def getDate(self):
-        data_objeto = datetime.strptime(getInitialDate(), "%Y-%m-%dT%H:%M:%S")
-        return data_objeto.strftime("%d/%m/%Y")
-
-    def baixar_consulta_turno(self, operacao):
-        """Método chamado pelo main.py para iniciar o processo por operação."""
+    def baixar_gpm_periodo(self, operacao, data_inicio_obj, data_fim_obj):
         print(f"----------------------------------------------------------------------")
-        print(f"- Iniciando download do consulta turno para operação {operacao}")
+        print(f"- Iniciando download do GPM em lote para operação {operacao}")
+        print(f"- Período: {data_inicio_obj.strftime('%d/%m/%Y')} até {data_fim_obj.strftime('%d/%m/%Y')}")
         
+        from gsheets import Gsheets
+        import pandas as pd
+        gsheets = Gsheets()
+        aba_acessos_gpm = 'GPM'
+        login_gpm, senha_gpm = gsheets.acessos("TSB", aba_acessos_gpm)
+
         if operacao == 'BA':
             consulta_url = 'https://sirtecba.gpm.srv.br/#GR412'
-            login_gpm = os.getenv('LOGIN_GPM_BA') or os.getenv('LOGIN_GPM')
-            senha_gpm = os.getenv('PASSWORD_GPM_BA') or os.getenv('SENHA_GPM_BA') or os.getenv('SENHA_GPM')
         elif operacao == 'CE':
             consulta_url = 'https://sirtecce.gpm.srv.br/#GR412'
-            login_gpm = os.getenv('LOGIN_GPM_CE') or os.getenv('LOGIN_GPM')
-            senha_gpm = os.getenv('PASSWORD_GPM_CE') or os.getenv('SENHA_GPM_CE') or os.getenv('SENHA_GPM')
         else:
             print(f"# Operação {operacao} não reconhecida.")
             return
 
         if not login_gpm or not senha_gpm:
-            print(f"# ERRO: Credenciais de login GPM não encontradas para {operacao}. Verifique os Secrets/Ambiente.")
+            print(f"# ERRO: Credenciais de login GPM não encontradas para {operacao}.")
             return
+            
+        # Lógica de fatiamento de 7 em 7 dias
+        chunk_start = data_inicio_obj
+        index_chunk = 1
+        arquivos_chunks = []
+        
+        while chunk_start <= data_fim_obj:
+            chunk_end = chunk_start + timedelta(days=6)
+            if chunk_end > data_fim_obj:
+                chunk_end = data_fim_obj
+                
+            str_inicio = chunk_start.strftime("%d/%m/%Y")
+            str_fim = chunk_end.strftime("%d/%m/%Y")
+            
+            print(f"\n--- Processando Fatia {index_chunk}: {str_inicio} a {str_fim} ---")
+            
+            # Limpa downloads para não misturar
+            self.limpar_downloads_inicial()
+            
+            arquivo_salvo = self._processar_download(consulta_url, login_gpm, senha_gpm, operacao, chunk_start, chunk_end, index_chunk)
+            if arquivo_salvo and os.path.exists(arquivo_salvo):
+                arquivos_chunks.append(arquivo_salvo)
+                
+            chunk_start = chunk_end + timedelta(days=1)
+            index_chunk += 1
+            
+        # Concatenação final
+        if arquivos_chunks:
+            print(f"\n- Concatenando {len(arquivos_chunks)} arquivos do GPM para {operacao}...")
+            dfs = []
+            for arq in arquivos_chunks:
+                try:
+                    df = pd.read_csv(arq, sep=';', encoding='utf-8-sig', dtype=str)
+                    dfs.append(df)
+                except Exception as e:
+                    print(f"Erro ao ler arquivo {arq}: {e}")
+            
+            if dfs:
+                df_final = pd.concat(dfs, ignore_index=True)
+                # Remove os temporários se desejar, mas vou manter o final na pasta temp com o nome oficial
+                caminho_final = os.path.join(path_temp, f"consulta turno {operacao}.csv")
+                df_final.to_csv(caminho_final, sep=';', index=False, encoding='utf-8-sig')
+                print(f"✅ GPM Consolidado salvo em: {caminho_final}")
+                
+                # Cleanup chunks
+                for arq in arquivos_chunks:
+                    try:
+                        os.remove(arq)
+                    except:
+                        pass
+        else:
+            print(f"# Nenhum dado capturado no GPM para {operacao}.")
 
-        self._processar_download(consulta_url, login_gpm, senha_gpm, operacao)
-
-    def _processar_download(self, consulta_url, login_gpm, senha_gpm, operacao):
+    def _processar_download(self, consulta_url, login_gpm, senha_gpm, operacao, dt_inicio, dt_fim, index_chunk):
         login_url = f'https://sirtec{operacao.lower()}.gpm.srv.br/index.php'
 
         self._navegar(login_url)
@@ -173,10 +221,9 @@ class BrowserGPM:
         
         print(f"- Navegando para a consulta via hash: {consulta_url}")
         self.navegador.execute_script(f"window.location.hash = '#GR412';")
-        self.navegador.refresh() # Crucial para forçar o carregamento do módulo no Firefox Headless
+        self.navegador.refresh() 
         sleep(5)
         
-        # AGUARDA O CARREGAMENTO DOS FILTROS (Novo Layout)
         print("- Localizando frame da consulta...")
         def switch_to_correct_frame():
             self.navegador.switch_to.default_content()
@@ -184,35 +231,29 @@ class BrowserGPM:
                 return True
             
             iframes = self.navegador.find_elements(By.TAG_NAME, "iframe")
-            print(f"- Analisando {len(iframes)} iframes em busca dos filtros...")
             for i, frame in enumerate(iframes):
                 try:
                     self.navegador.switch_to.frame(frame)
-                    # Verifica tanto o placeholder quanto a classe do Flatpickr
                     if self.navegador.find_elements(By.XPATH, "//input[contains(@placeholder,'Data Inicial')]") or \
                        self.navegador.find_elements(By.CLASS_NAME, "flatpickr-input"):
-                        print(f"- Filtros encontrados no iframe {i}.")
                         return True
                 except: pass
                 self.navegador.switch_to.default_content()
             return False
 
         if not switch_to_correct_frame():
-            print("- Segunda tentativa de localização de frame...")
             sleep(5)
             if not switch_to_correct_frame():
-                print(f"# ERRO: Página de consulta ou iframe não encontrado.")
-                return
+                print(f"# ERRO: Página de consulta não encontrada.")
+                return None
         
-        # PREENCHIMENTO DE DATAS (NOVO LAYOUT FLATPICKR)
-        data_str = self.getDate() # DD/MM/YYYY
-        # ISO para flatpickr (mais confiável via JS)
-        try:
-            data_iso = datetime.strptime(data_str, "%d/%m/%Y").strftime("%Y-%m-%d")
-        except:
-            data_iso = data_str
+        data_str_inicio = dt_inicio.strftime("%d/%m/%Y")
+        data_iso_inicio = dt_inicio.strftime("%Y-%m-%d")
+        
+        data_str_fim = dt_fim.strftime("%d/%m/%Y")
+        data_iso_fim = dt_fim.strftime("%Y-%m-%d")
 
-        print(f"- Definindo datas: {data_str} (ISO: {data_iso})")
+        print(f"- Definindo datas: Inicial {data_str_inicio} / Final {data_str_fim}")
         
         def set_date_via_typing(placeholder_part, value, iso_val):
             try:
@@ -253,17 +294,16 @@ class BrowserGPM:
             except:
                 return False
 
-        r1 = set_date_via_typing('Inicial', data_str, data_iso)
-        r2 = set_date_via_typing('Final', data_str, data_iso)
+        r1 = set_date_via_typing('Inicial', data_str_inicio, data_iso_inicio)
+        r2 = set_date_via_typing('Final', data_str_fim, data_iso_fim)
         
         if not (r1 and r2):
             print("⚠️ Aviso: Falha parcial na aplicação de datas. Verificando fallbacks...")
-            # Fallback 2: JS Direto via classe flatpickr-input
             js_fallback = f"""
                 var inputs = document.querySelectorAll('.flatpickr-input');
                 if (inputs.length >= 2) {{
-                    if(inputs[0]._flatpickr) inputs[0]._flatpickr.setDate('{data_iso}', true);
-                    if(inputs[1]._flatpickr) inputs[1]._flatpickr.setDate('{data_iso}', true);
+                    if(inputs[0]._flatpickr) inputs[0]._flatpickr.setDate('{data_iso_inicio}', true);
+                    if(inputs[1]._flatpickr) inputs[1]._flatpickr.setDate('{data_iso_fim}', true);
                 }}
             """
             self.navegador.execute_script(js_fallback)
@@ -358,8 +398,7 @@ class BrowserGPM:
                 """
                 csv_data = self.navegador.execute_script(script_scraper)
                 
-                # Salva o resultado do scraping como um arquivo CSV de backup
-                backup_filename = f"SCRAPED_BACKUP_{operacao}.csv"
+                backup_filename = f"SCRAPED_BACKUP_{operacao}_{index_chunk}.csv"
                 backup_path = os.path.join(path_downloads, backup_filename)
                 with open(backup_path, "w", encoding="utf-8-sig") as f:
                     f.write(csv_data)
@@ -369,15 +408,22 @@ class BrowserGPM:
 
         self._fechar_chrome()
         
-        # ORGANIZAÇÃO DE ARQUIVOS
-        self._organizar_arquivos_v5(operacao)
-        print(f'- Processo de download do consulta turno finalizado para operação {operacao}')
+        # ORGANIZAÇÃO DE ARQUIVOS e retorna o caminho do arquivo extraído
+        caminho_final_chunk = self._organizar_arquivos_v5(operacao, index_chunk)
+        print(f'- Processo de download finalizado para operação {operacao} (Fatia {index_chunk})')
+        return caminho_final_chunk
 
-    def _organizar_arquivos_v5(self, operacao):
+    def _organizar_arquivos_v5(self, operacao, index_chunk):
         # código de descompactação e renomeação
         files = os.listdir(path_downloads)
         zip_files = [f for f in files if f.endswith('.zip')]
         
+        new_filename = f"consulta turno {operacao}_{index_chunk}.csv"
+        new_path = os.path.join(path_temp, new_filename)
+        os.makedirs(path_temp, exist_ok=True)
+        
+        arquivo_encontrado = False
+
         if zip_files:
             for zip_name in zip_files:
                 zip_path = os.path.join(path_downloads, zip_name)
@@ -390,12 +436,11 @@ class BrowserGPM:
                     extracted_files = [f for f in os.listdir(path_downloads) if (f.endswith('.csv') or f.endswith('.xls') or f.endswith('.xlsx')) and 'SCRAPED' not in f]
                     for ext_file in extracted_files:
                         old_path = os.path.join(path_downloads, ext_file)
-                        new_filename = f"consulta turno {operacao}.{'xls' if ext_file.endswith('.xls') else ('xlsx' if ext_file.endswith('.xlsx') else 'csv')}"
-                        new_path = os.path.join(path_temp, new_filename)
                         
                         if os.path.exists(new_path): os.remove(new_path)
                         shutil.move(old_path, new_path)
                         print(f"- Arquivo extraído renomeado e movido para {new_path}")
+                        arquivo_encontrado = True
                     
                     os.remove(zip_path)
                     print(f"- Arquivo ZIP {zip_name} removido.")
@@ -403,18 +448,18 @@ class BrowserGPM:
                     print(f"# Erro ao processar ZIP {zip_name}: {e}")
         
         # Caso especial: Se não veio ZIP ou se o CSV veio vazio, usamos o BACKUP de scraping
-        backup_file = f"SCRAPED_BACKUP_{operacao}.csv"
+        backup_file = f"SCRAPED_BACKUP_{operacao}_{index_chunk}.csv"
         backup_path = os.path.join(path_downloads, backup_file)
         if os.path.exists(backup_path):
-            os.makedirs(path_temp, exist_ok=True)
-            new_path = os.path.join(path_temp, f"consulta turno {operacao}.csv")
             # Só usa o scraping se o original não existir ou estiver quase vazio
-            if not os.path.exists(new_path) or os.path.getsize(new_path) < 500:
-                if os.path.exists(backup_path):
-                    shutil.move(backup_path, new_path)
-                    print(f"- [ROBUSTEZ] Usando dados capturados via SCRAPING direto da tela para '{operacao}'.")
+            if not arquivo_encontrado or (os.path.exists(new_path) and os.path.getsize(new_path) < 500):
+                shutil.move(backup_path, new_path)
+                print(f"- [ROBUSTEZ] Usando dados capturados via SCRAPING direto da tela para '{operacao}'.")
+                arquivo_encontrado = True
             else:
-                if os.path.exists(backup_path): os.remove(backup_path)
+                os.remove(backup_path)
+
+        return new_path if arquivo_encontrado else None
 
 
 ##### outros ###             

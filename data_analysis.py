@@ -3,7 +3,6 @@ import os
 import json
 from datetime import datetime
 import shutil
-from get_date_run import getInitialDate
 from auxiliar import *
 
 # Variáveis 
@@ -11,34 +10,15 @@ column_index = 3
 
 
 def process_file(file_path, operacao):
-    # 2. Carregar o arquivo CSV em um DataFrame com especificação do separador
+    # 2. Carregar o arquivo CSV
     try:
-        # VERIFICAÇÃO DE CONTEÚDO BRUTO PARA O GITHUB ACTIONS
-        print(f"\n{l}--- [DEBUG] INSPECIONANDO ARQUIVO BRUTO: {os.path.basename(file_path)} ---")
-        try:
-            with open(file_path, 'r', encoding='utf-8-sig') as f:
-                print(f"CONTEÚDO BRUTO (Primeiras 3 linhas):\n{f.readline()}{f.readline()}{f.readline()}")
-        except:
-            print("Não foi possível ler o conteúdo bruto do arquivo.")
-
-        df = pd.read_csv(file_path, sep=';', encoding='utf-8-sig')  # Especificando o separador e encoding
-        print(f"--- [DEBUG] Colunas no CSV original: {df.columns.tolist()}")
-        if 'dta_inicio' in df.columns:
-            print(f"--- [DEBUG] Rastreio 'dta_inicio' (Original):\n{df['dta_inicio'].head(5)}")
-        else:
-            print("--- [DEBUG] AVISO: Coluna 'dta_inicio' NÃO FOI ENCONTRADA no CSV original.")
+        df = pd.read_csv(file_path, sep=';', encoding='utf-8-sig')
     except Exception as e:
         print(f"# Erro ao ler o arquivo {file_path}: {e}")
         return None
 
     # Remover espaços extras nos nomes das colunas
     df.columns = df.columns.str.strip()
-
-    # Verificar e imprimir as primeiras linhas do DataFrame para depuração
-    print(f"\n- Primeiras linhas do arquivo {file_path}:\n", df.head())
-
-    # Verificar e imprimir as colunas do DataFrame para depuração
-    print(f"\n- Colunas no arquivo {file_path}:\n", df.columns.tolist())
 
     # 3. Verificar se as colunas necessárias estão presentes
     required_columns = [
@@ -55,75 +35,34 @@ def process_file(file_path, operacao):
     ]
 
     missing_columns = [col for col in required_columns if col not in df.columns]
-
     if missing_columns:
-        print(f"O arquivo {file_path} não contém as seguintes colunas necessárias: {missing_columns}")
+        print(f"# Colunas ausentes em {os.path.basename(file_path)}: {missing_columns}")
         return None
 
-    # Selecionar apenas as colunas necessárias
     df = df[required_columns]
-
-    # 4. Renomear a coluna 'cod_turno_tur' para 'id'
-    df.rename(columns={'cod_turno_tur': 'id'}, inplace=True)
-    
-    # 4. Renomear a coluna 'cod_turno_tur' para 'id'
-    df.rename(columns={'num_contrato': 'contrato'}, inplace=True)
-
-    # 4. Limpar nomes de colunas (remover espaços invisíveis)
+    df.rename(columns={'cod_turno_tur': 'id', 'num_contrato': 'contrato'}, inplace=True)
     df.columns = df.columns.str.strip()
-    
-    # 5. Criar a nova coluna 'data' com FALLBACK (tenta várias colunas do GPM se dta_inicio falhar)
-    print("--- [DEBUG] Verificando colunas de data disponíveis...")
-    colunas_data_possiveis = [
-        'dta_inicio'#, 
-        #'Dta_inicio de deslocamento primeiro serv', 
-        #'Dta_inicio do inicio do reparo primeiro serv'
-    ]
-    coluna_selecionada = None
-    
-    for col in colunas_data_possiveis:
-        if col in df.columns:
-            # Verifica se pelo menos 1 linha tem dado nessa coluna (não nulo e não apenas espaços)
-            col_data = df[col].dropna()
-            if not col_data.empty and col_data.astype(str).str.strip().ne('').any():
-                coluna_selecionada = col
-                print(f"--- [DEBUG] Coluna de data encontrada com dados reais: '{col}'")
-                break
-    
-    if not coluna_selecionada:
-        print("--- [DEBUG] AVISO CRÍTICO: Nenhuma coluna de data contém dados! Tentando usar 'dta_inicio' mesmo assim.")
-        coluna_selecionada = 'dta_inicio'
-    
-    df['data'] = pd.to_datetime(df[coluna_selecionada], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
-    
-    # SELECT APENAS NAS DATAS - DEBUG SOLICITADO
-    print(f"\n--- [DEBUG SELECT] Datas processadas em 'process_file' ({operacao}):")
-    print(df[['dta_inicio', 'data']].head(10).to_string())
-    print("-" * 50)
 
-    # 6. Adicionar a coluna 'operacao'
+    # 5. Criar coluna 'data' a partir de dta_inicio
+    coluna_selecionada = 'dta_inicio'
+    if coluna_selecionada not in df.columns or df[coluna_selecionada].dropna().empty:
+        print(f"# AVISO: Coluna '{coluna_selecionada}' vazia em {os.path.basename(file_path)}.")
+
+    df['data'] = pd.to_datetime(df[coluna_selecionada], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
     df['operacao'] = operacao
 
-    # 7. Ordenar o DataFrame pela ordem especificada
+    # 7. Reordenar colunas
     df = df[[
-        'des_equipe',
-        'parceiros',
-        'Coordenador',
-        'Supervisor',
-        'placa',
-        'dta_inicio',
-        'Dta_inicio de deslocamento primeiro serv',
+        'des_equipe', 'parceiros', 'Coordenador', 'Supervisor', 'placa',
+        'dta_inicio', 'Dta_inicio de deslocamento primeiro serv',
         'Dta_inicio do inicio do reparo primeiro serv',
-        'id',
-        'contrato',
-        'data',
-        'operacao'
+        'id', 'contrato', 'data', 'operacao'
     ]]
 
-    # Salvar o DataFrame processado no mesmo arquivo CSV
+    # Salvar o DataFrame processado
     try:
         df.to_csv(file_path, sep=';', index=False, encoding='utf-8-sig')
-        print(f"- Arquivo processado e salvo no mesmo local: {file_path}")
+        print(f"- GPM {operacao} processado: {len(df)} registros.")
     except Exception as e:
         print(f"# Erro ao salvar o arquivo {file_path}: {e}")
 
@@ -134,49 +73,45 @@ def find_and_process_files(path_temp, operacao):
             process_file(file_path, operacao)
             
 def process_pontomais_files(path_temp):
-    # Lista para armazenar os dataframes
-    dfs = []
-
-    # Percorrer os arquivos no diretório
-    for filename in os.listdir(path_temp):
-        if "Pontomais" in filename and filename.endswith('.xlsx'):
-            file_path = os.path.join(path_temp, filename)
-            
-            # Ler o arquivo Excel, ignorando as 3 primeiras linhas
-            df = pd.read_excel(file_path, skiprows=3)
-            
-            # Filtrar a coluna Data e remover os valores indesejados
-            df = df[~df['Data'].isin(['TOTAIS', 'Resumo', 'Colaborador', 'Data'])]
-            
-            # Filtrar a coluna especificada
-            if column_index == 3:
-                df = df[df.iloc[:, column_index - 1].notna()]
-            elif column_index == 2:
-                df = df[df.iloc[:, column_index].notna()]
-            else:
-                raise ValueError("O índice da coluna deve ser 2 ou 3.")
-
-            # Adicionar o dataframe à lista
-            dfs.append(df)
-
-    # Concatenar todos os dataframes em um só
-    final_df = pd.concat(dfs)
-
-    # Salvar o dataframe final em um arquivo Excel
-    final_df.to_excel(os.path.join(path_temp, "Pontomais_final.xlsx"), index=False)
+    """
+    Lê o arquivo Pontomais_final.xlsx (já consolidado pelo main.py a partir dos CSVs yyyy-mm
+    baixados do Drive) e garante que a coluna '1ª Entrada' existe para o cruzamento com GPM.
+    """
+    caminho_consolidado = os.path.join(path_temp, "Pontomais_final.xlsx")
     
-    # Ler o arquivo final
-    final_df = pd.read_excel(pontomais_df, header=0)
-
-    # Verifica se a coluna '1ª Entrada' existe; se não, cria a coluna com valores nulos
-    if '1ª Entrada' not in final_df.columns:
-        final_df['1ª Entrada'] = None
+    # Verifica se o arquivo consolidado já foi gerado pelo main.py
+    if not os.path.exists(caminho_consolidado):
+        # Fallback: tenta ler CSVs yyyy-mm diretamente na pasta temp
+        print("# AVISO: Pontomais_final.xlsx não encontrado. Tentando montar a partir de CSVs...")
+        dfs = []
+        for filename in sorted(os.listdir(path_temp)):
+            if filename.endswith('.csv') and len(filename) == 11:  # Padrão yyyy-mm.csv
+                file_path = os.path.join(path_temp, filename)
+                try:
+                    df = pd.read_csv(file_path, encoding='utf-8-sig', dtype=str)
+                    dfs.append(df)
+                    print(f"- Lido: {filename}")
+                except Exception as e:
+                    print(f"# Erro ao ler {filename}: {e}")
         
-    # Manter apenas as colunas desejadas
-    final_df = final_df[['Data', 'Nome', '1ª Entrada']]
+        if not dfs:
+            print("# ERRO CRÍTICO: Nenhum arquivo de ponto encontrado.")
+            return
+        
+        final_df = pd.concat(dfs, ignore_index=True)
+        final_df.to_excel(caminho_consolidado, index=False)
+        print(f"- Pontomais_final.xlsx gerado com {len(final_df)} linhas.")
+    else:
+        print(f"- Pontomais_final.xlsx já existe ({caminho_consolidado}). Usando arquivo existente.")
+        final_df = pd.read_excel(caminho_consolidado, dtype=str)
 
-    # Salvar o dataframe final com as colunas desejadas
-    final_df.to_excel(pontomais_df, index=False)
+    # Garante que a coluna '1ª Entrada' existe (necessária para o cruzamento com GPM)
+    if '1ª Entrada' not in final_df.columns:
+        print("# AVISO: Coluna '1ª Entrada' não encontrada. Criando coluna vazia.")
+        final_df['1ª Entrada'] = None
+        final_df.to_excel(caminho_consolidado, index=False)
+    
+    print(f"- process_pontomais_files concluído. Total de linhas: {len(final_df)}")
 
 def process_consulta_turno_files(path_temp, pontomais_df, operacao):
     # Iterar sobre os arquivos no diretório
@@ -209,16 +144,14 @@ def process_consulta_turno_files(path_temp, pontomais_df, operacao):
             # Renomear a coluna 'menor_tempo' para 'hora_pontomais'
             consulta_turno_df.rename(columns={'menor_tempo': 'hora_pontomais'}, inplace=True)
 
-            # Criar a coluna 'date_hour_pontomais' que é a concatenação das colunas 'Data' e 'hora_pontomais'
-            consulta_turno_df['date_hour_pontomais'] = consulta_turno_df['data'].astype(str) + ' ' + consulta_turno_df['hora_pontomais'].astype(str)
-            
-            # SELECT APENAS NAS DATAS - DEBUG SOLICITADO
-            print(f"\n--- [DEBUG SELECT] Datas finais em 'process_consulta_turno_files' ({operacao}):")
-            print(consulta_turno_df[['data', 'hora_pontomais', 'date_hour_pontomais']].head(10).to_string())
-            print("-" * 50)
-            # Salvar o arquivo "consulta turno" com as novas colunas, sobrescrevendo o conteúdo original
+            # Criar a coluna 'date_hour_pontomais'
+            consulta_turno_df['date_hour_pontomais'] = (
+                consulta_turno_df['data'].astype(str) + ' ' + consulta_turno_df['hora_pontomais'].astype(str)
+            )
+
+            # Salvar o arquivo "consulta turno" enriquecido
             consulta_turno_df.to_csv(file_path, sep=';', index=False, encoding='utf-8-sig')
-            print(f"- Arquivo processado e salvo: {file_path}\n")
+            print(f"- Consulta turno {operacao} enriquecido com hora_pontomais: {len(consulta_turno_df)} registros.")
 
 def load_vehicle_records(file_path):
     # Carregar os registros de veículos do arquivo JSON
@@ -310,20 +243,39 @@ def process_vehicle_logs_by_operation(path_temp, operacao, notifications_file):
 
     # Salvar o arquivo "consulta turno" com as atualizações na coluna 'hour_km_run_pontomais'
     consulta_turno_df.to_csv(consulta_turno_path, sep=';', index=False, encoding='utf-8-sig')
-    print(f"\n- Arquivo 'consulta turno {operacao}' processado e salvo com as atualizações na coluna 'hour_km_run_pontomais'.")
+    print(f"\n- GPM {operacao}: enriquecido com dados de telemetria ZUQ.")
         
-    # Fazer uma cópia do arquivo, renomear e mover para a pasta final
-    data_objeto = datetime.strptime(getInitialDate(), "%Y-%m-%dT%H:%M:%S")
-    current_date = data_objeto.strftime("%Y_%m_%d")
-
-    new_file_name = f"{operacao}{current_date}_df_final.csv"
-    new_file_path = os.path.join(path_final, new_file_name)
-
+    # Separa por dia e salva um arquivo por data
     os.makedirs(path_final, exist_ok=True)
+    arquivos_gerados = []
     
-    shutil.copy2(consulta_turno_path, new_file_path)
-    print(f"- Arquivo copiado, renomeado e movido para: {new_file_path}")
-    return new_file_path
+    if 'data' not in consulta_turno_df.columns:
+        print(f"# ERRO: Coluna 'data' não encontrada no arquivo de consulta turno {operacao}.")
+        return None
+
+    datas_unicas = consulta_turno_df['data'].dropna().unique()
+    
+    for data_str in sorted(datas_unicas):
+        try:
+            # Converte DD/MM/YYYY para YYYY_MM_DD para o nome do arquivo
+            data_obj = datetime.strptime(data_str, "%d/%m/%Y")
+            data_fmt = data_obj.strftime("%Y_%m_%d")
+        except:
+            continue
+        
+        df_dia = consulta_turno_df[consulta_turno_df['data'] == data_str]
+        new_file_name = f"{operacao}{data_fmt}_df_final.csv"
+        new_file_path = os.path.join(path_final, new_file_name)
+        
+        # Sobrescreve se já existir
+        if os.path.exists(new_file_path):
+            os.remove(new_file_path)
+        
+        df_dia.to_csv(new_file_path, sep=';', index=False, encoding='utf-8-sig')
+        arquivos_gerados.append(new_file_path)
+    
+    print(f"- {len(arquivos_gerados)} arquivos diarios gerados/atualizados na pasta final ({operacao}).")
+    return arquivos_gerados if arquivos_gerados else None
     
 def criar_dataframe(diretorio, comeca_com, termina_com):
     base_dados = []
@@ -350,70 +302,61 @@ def criar_dataframe(diretorio, comeca_com, termina_com):
     return df
     
 def loc_menor_entrada_pontomais():
+    """
+    Versão otimizada: usa explode + merge vetorizado em vez de apply() linha-a-linha.
+    Reduz a complexidade de O(n*m) para O(n log n).
+    """
+    df_pontomais = criar_dataframe(path_temp, 'Pontomais_final', '.xlsx')
+    df_consulta = criar_dataframe(path_temp, 'consulta turno', '.csv')
 
-    # Função para encontrar a primeira entrada correspondente ao primeiro nome na coluna 'Nome' do arquivo "Pontomais_final.xlsx"
-    def encontrar_primeira_entrada(nome):
-        if isinstance(nome, str):
-            nome_search = nome.strip().upper()
-            # Filtra o dataframe usando comparação robusta
-            match = df_pontomais_final[df_pontomais_final['Nome'].str.strip().str.upper() == nome_search]['1ª Entrada']
-            return match.iloc[0] if not match.empty else None
-        return None
-
-    df_pontomais_final = criar_dataframe(path_temp, 'Pontomais_final', '.xlsx')
-    df_consulta_turno = criar_dataframe(path_temp, 'consulta turno', '.csv')
-
-    # Verifica se a coluna '1ª Entrada' existe; se não, cria a coluna com valores nulos
-    if '1ª Entrada' not in df_pontomais_final.columns:
-        df_pontomais_final['1ª Entrada'] = None
-
-    # Verifica se a coluna '1ª Entrada' existe; se não, cria a coluna com valores nulos
-    if '1ª Entrada' not in df_consulta_turno.columns:
-        df_consulta_turno['1ª Entrada'] = None
-
-    # Mantém o ID para o cruzamento futuro
-    df_parceiros_base = df_consulta_turno[['id', 'parceiros']].copy()
+    if '1ª Entrada' not in df_pontomais.columns:
+        df_pontomais['1ª Entrada'] = None
     
-    # Divide a coluna parceiros em várias colunas
-    parceiros_split = df_parceiros_base['parceiros'].str.split(' - ', expand=True)
+    # ----- 1. Prepara o lookup do Pontomais -----
+    # Normaliza o nome para garantir match case-insensitive
+    df_pontomais['_nome_key'] = df_pontomais['Nome'].astype(str).str.strip().str.upper()
     
-    # Criar DataFrame final com ID e nomes dos parceiros
-    df_parceiros = pd.concat([df_parceiros_base[['id']], parceiros_split], axis=1)
-    df_parceiros.columns = ['id'] + [f'parceiro_{i+1}' for i in range(parceiros_split.shape[1])]
-        
-
-    for col in df_parceiros.columns:
-        # Nome da nova coluna para armazenar a hora do ponto
-        hora_col = f"{col}_hora_ponto"
-
-        # Aplicar a função e criar a nova coluna
-        df_parceiros[hora_col] = df_parceiros[col].apply(encontrar_primeira_entrada)
-
-    for col in df_parceiros.columns:
-        if '_hora_ponto' in col:
-            # Converter valores para tipo datetime.time
-            df_parceiros[col] = pd.to_datetime(df_parceiros[col], format='%H:%M', errors='coerce').dt.time
-
-    # Garantir que todas as colunas de horário tenham valores válidos para comparação
-    colunas_horario = [col for col in df_parceiros.columns if '_hora_ponto' in col]
-    for col in colunas_horario:
-        # Substituir apenas valores nulos ou NaT por "23:59:59"
-        df_parceiros[col] = df_parceiros[col].apply(
-            lambda x: x if pd.notnull(x) else datetime.strptime("23:59:59", "%H:%M:%S").time()
-        )
-
-    # Criar uma nova coluna com o menor registro de tempo
-    df_parceiros['menor_tempo'] = df_parceiros[colunas_horario].apply(
-        lambda row: min(row), axis=1
+    # Converte '1ª Entrada' (HH:MM) para datetime para comparar numérico
+    df_pontomais['_entrada_dt'] = pd.to_datetime(
+        df_pontomais['1ª Entrada'].astype(str), format='%H:%M', errors='coerce'
     )
     
-    # Substituir valores 23:59:59 por None na coluna menor_tempo
-    df_parceiros['menor_tempo'] = df_parceiros['menor_tempo'].apply(
-        lambda x: None if x == datetime.strptime("23:59:59", "%H:%M:%S").time() else x
+    # Lookup final: menor entrada por nome (já vetorizado)
+    lookup = (
+        df_pontomais
+        .dropna(subset=['_entrada_dt'])
+        .groupby('_nome_key')['_entrada_dt']
+        .min()
+        .reset_index()
+        .rename(columns={'_entrada_dt': '_menor_entrada'})
     )
-
-    df_parceiros.to_csv(os.path.join(path_temp,'menor-entrada-equipes.csv'), sep=';', index=False, encoding='utf-8-sig')
     
-    return df_parceiros
+    # ----- 2. Explode parceiros em 1 linha por parceiro -----
+    df_parceiros = df_consulta[['id', 'parceiros']].copy()
+    df_parceiros['_parceiro'] = df_parceiros['parceiros'].astype(str).str.split(' - ')
+    df_parceiros = df_parceiros.explode('_parceiro')
+    df_parceiros['_nome_key'] = df_parceiros['_parceiro'].str.strip().str.upper()
+    
+    # ----- 3. Merge com lookup do Pontomais -----
+    df_merged = df_parceiros.merge(lookup, on='_nome_key', how='left')
+    
+    # ----- 4. Menor entrada por ID de turno -----
+    df_min = (
+        df_merged
+        .groupby('id')['_menor_entrada']
+        .min()
+        .reset_index()
+    )
+    
+    # Converte de volta para time
+    df_min['menor_tempo'] = df_min['_menor_entrada'].dt.time
+    # None onde não encontrou nenhum ponto
+    df_min.loc[df_min['_menor_entrada'].isna(), 'menor_tempo'] = None
+    
+    resultado = df_min[['id', 'menor_tempo']]
+    resultado.to_csv(os.path.join(path_temp, 'menor-entrada-equipes.csv'), sep=';', index=False, encoding='utf-8-sig')
+    
+    print(f"- Cruzamento concluído: {len(resultado)} turnos processados, {resultado['menor_tempo'].notna().sum()} com ponto encontrado.")
+    return resultado
 
 

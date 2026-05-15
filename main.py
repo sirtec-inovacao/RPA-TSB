@@ -6,7 +6,6 @@ from get_date_run import writeDate
 from get_date_run import getInitialDate
 from auxiliar import *
 from download_gpm import Chrome
-from download_pontomais import Pontomais
 
 from datetime import datetime, timedelta
 from time import sleep
@@ -19,85 +18,124 @@ def main():
 
     chrome = Chrome()
     gsheets = Gsheets()
-    ponto = Pontomais()
 
     hoje = datetime.now().strftime("%d/%m/%Y")
     hoje_obj = datetime.strptime(hoje, "%d/%m/%Y")
 
-    # Loop para processar dia a dia, a partir do dia da planilha até ontem
-    while True:
-        # Busca a data atual na planilha de controle
-        data_planilha = getDate()
+    # Loop removido. Trabalhando em Lote (Batch).
+    # Busca a data atual no config.json
+    data_planilha = getDate()
+    
+    if data_planilha is None:
+        print(f"{l}# ERRO: Falha ao obter a data do config.{l}")
+        return
+
+    data_planilha_obj = datetime.strptime(data_planilha, "%d/%m/%Y")
+    hoje_obj = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    ontem_obj = hoje_obj - timedelta(days=1)
+
+    if data_planilha_obj > ontem_obj:
+        print(f'{l}- Todas as datas já foram processadas! Nenhuma pendente.{l}')
+        return
+
+    print(f'{t}>>> PROCESSANDO PERIODO: {data_planilha_obj.strftime("%d/%m/%Y")} até {ontem_obj.strftime("%d/%m/%Y")} <<<{t}')
+    
+    # Limpa as pastas de trabalho para garantir que não há arquivos de execuções anteriores
+    import shutil as _shutil
+    for _pasta in [path_downloads, path_temp]:
+        if os.path.exists(_pasta):
+            _shutil.rmtree(_pasta)
+        os.makedirs(_pasta, exist_ok=True)
+    print(f"- Pastas de trabalho limpas: downloads e temp.")
+    
+    # --- 1. DOWNLOAD DRIVE (PONTOMAIS CONSOLIDADO) ---
+    id_pasta_pontos = "1fDcVXWg1YJ3xlAer0JmOD59XtryiWR1N"
+    
+    # Lista os arquivos da pasta do Drive no padrão yyyy-mm e decide quais baixar
+    # Regra: se o mês atual existe, baixa ele + anterior. Se não existe, baixa os 2 últimos disponíveis.
+    print(f"{l}- Consultando arquivos disponíveis na pasta do Drive...")
+    meses_str = gsheets.selecionar_meses_drive(id_pasta_pontos)
+    print(f"- Meses selecionados para download: {meses_str}")
+    arquivos_drive = gsheets.download_arquivos_pasta_drive(id_pasta_pontos, meses_str, path_downloads)
+    
+    # Concatena arquivos se houver e salva no path_temp
+    if arquivos_drive:
+        dfs = []
+        for arq in arquivos_drive:
+            ext = os.path.splitext(arq)[1].lower()
+            try:
+                if ext == '.csv':
+                    # Arquivos do Drive usam ; como separador
+                    dfs.append(pd.read_csv(arq, sep=';', encoding='utf-8-sig', dtype=str))
+                elif ext in ('.xlsx', '.xls'):
+                    dfs.append(pd.read_excel(arq, dtype=str))
+                else:
+                    dfs.append(pd.read_csv(arq, encoding='utf-8-sig', dtype=str))
+                print(f"  - Lido: {os.path.basename(arq)}")
+            except Exception as e:
+                print(f"# Erro ao ler arquivo {os.path.basename(arq)}: {e}")
         
-        # Se não conseguir buscar a data, para a execução com erro claro
-        if data_planilha is None:
-            print(f"{l}# ERRO: Falha ao obter a data da planilha. Verifique as credenciais e o ID da planilha.{l}")
-            break
+        if dfs:
+            df_consolidado = pd.concat(dfs, ignore_index=True)
+            os.makedirs(path_temp, exist_ok=True)
+            caminho_ponto_temp = os.path.join(path_temp, "Pontomais_final.xlsx")
+            df_consolidado.to_excel(caminho_ponto_temp, index=False)
+            print(f"- Pontomais consolidado: {len(df_consolidado)} linhas")
+        else:
+            print("# ERRO: Nenhum arquivo do Drive pôde ser lido.")
+            caminho_ponto_temp = None
+    else:
+        print("# AVISO: Nenhum arquivo do Drive foi encontrado para os meses informados.")
 
-        # O dia a ser processado é o PRÓPRIO dia da planilha
-        data_planilha_obj = datetime.strptime(data_planilha, "%d/%m/%Y")
+    # --- 2. DOWNLOAD ZUQ ---
+    print(f"{l}- Fazendo download dos arquivos ZUQ")
+    az.baixar_zuq_periodo(data_planilha_obj, ontem_obj)
+    
+    # --- 3. DOWNLOAD GPM ---
+    print(f"{l}- Fazendo download dos arquivos GPM (BA e CE)")
+    chrome.baixar_gpm_periodo("BA", data_planilha_obj, ontem_obj)
+    chrome.baixar_gpm_periodo("CE", data_planilha_obj, ontem_obj)
 
-        # Se o dia da planilha já é hoje ou posterior, não há mais datas (processa até ontem)
-        if data_planilha_obj >= hoje_obj:
-            print(f'{l}- Todas as datas foram processadas até ontem! Nenhuma data pendente.{l}')
-            break
+    print(f"{l}- Etapa de DOWNLOADS em lote finalizada!{l}")
+    
+    # --- 4. PROCESSAMENTO DOS DADOS ---
+    print(f"{l}- Iniciando processamento dos dados...")
+    
+    # Processa os arquivos GPM (BA e CE) enriquecendo com colunas auxiliares
+    da.find_and_process_files(path_temp, 'BA')
+    da.find_and_process_files(path_temp, 'CE')
+    
+    # Garante que o Pontomais_final.xlsx está pronto e tem a coluna '1ª Entrada'
+    da.process_pontomais_files(path_temp)
 
-        print(f'{t}>>> PROCESSANDO DIA: {data_planilha} <<<{t}')
-            
-        # Remover arquivos antigos
-        chrome.limpar_pasta_temp()
-        chrome.limpar_downloads_inicial()
+    # Faz o cruzamento GPM x Pontomais para obter a hora do ponto de cada equipe
+    da.process_consulta_turno_files(path_temp, caminho_ponto_temp, "BA")
+    da.process_consulta_turno_files(path_temp, caminho_ponto_temp, "CE")
+
+    # Enriquece com dados de telemetria da ZUQ e gera os arquivos finais
+    arquivo_final_ba = da.process_vehicle_logs_by_operation(path_temp, "BA", notifications_file)
+    arquivo_final_ce = da.process_vehicle_logs_by_operation(path_temp, "CE", notifications_file)
+    
+    # Faz upload dos arquivos finais para o Google Drive
+    for operacao_label, arquivos_finais in [('BA', arquivo_final_ba), ('CE', arquivo_final_ce)]:
+        if not arquivos_finais or not id_pasta_drive_final:
+            continue
         
-        # Fazer download dos arquivos do GPM
-        chrome.baixar_consulta_turno("BA")
-        chrome.baixar_consulta_turno("CE")
-        sleep(5)
-        
-        # Fazer download dos arquivos do pontomais
-        ponto.baixar_relatorios()
-        
-        # Fazer requisição e puxar os dados da API
-        az.relatorio_zuq()
+        # Suporta tanto lista (novo padrão diário) quanto string (compatibilidade)
+        lista = arquivos_finais if isinstance(arquivos_finais, list) else [arquivos_finais]
+        enviados = 0
+        for arq in lista:
+            if arq and os.path.exists(arq):
+                ok = gsheets.upload_para_drive(arq, id_pasta_drive_final)
+                if ok:
+                    enviados += 1
+        print(f"\n✅ {enviados}/{len(lista)} arquivo(s) de {operacao_label} enviados ao Drive.")
 
-        # Processar arquivos para BA
-        da.find_and_process_files(path_temp, 'BA')
-
-        # Processar arquivos para CE
-        da.find_and_process_files(path_temp, 'CE')
-
-        da.process_pontomais_files(path_temp)
-
-        # Fazer upload do arquivo consolidado do Pontomais para o Drive
-        print(f"{l}- Fazendo upload do arquivo consolidado do Pontomais para o Drive...")
-        gsheets.upload_para_drive(pontomais_df, "1KGzQdGQOpSi-CDJgmMakVe8zBwf9tzmM")
-        
-        # Chamar a função para processar os arquivos de consulta turno para BA
-        da.process_consulta_turno_files(path_temp, pontomais_df, "BA")
-        # Chamar a função para processar os arquivos de consulta turno para CE
-        da.process_consulta_turno_files(path_temp, pontomais_df, "CE")
-
-        # Processar os logs dos veículos para a operação BA
-        arquivo_final_ba = da.process_vehicle_logs_by_operation(path_temp, "BA", notifications_file)
-        if arquivo_final_ba and id_pasta_drive_final:
-            sucesso_ba = gsheets.upload_para_drive(arquivo_final_ba, id_pasta_drive_final)
-            if sucesso_ba:
-                print(f"\nSUCESSO: Arquivo BA salvo no Drive ({os.path.basename(arquivo_final_ba)})")
-            else:
-                print(f"\nERRO: Falha ao salvar arquivo BA no Drive ({os.path.basename(arquivo_final_ba)})")
-
-        # Processar os logs dos veículos para a operação CE
-        arquivo_final_ce = da.process_vehicle_logs_by_operation(path_temp, "CE", notifications_file)
-        if arquivo_final_ce and id_pasta_drive_final:
-            sucesso_ce = gsheets.upload_para_drive(arquivo_final_ce, id_pasta_drive_final)
-            if sucesso_ce:
-                print(f"\nSUCESSO: Arquivo CE salvo no Drive ({os.path.basename(arquivo_final_ce)})")
-            else:
-                print(f"\nERRO: Falha ao salvar arquivo CE no Drive ({os.path.basename(arquivo_final_ce)})")
-
-        # Avança a data na planilha DEPOIS de processar (para o próximo dia)
-        writeDate(data_planilha, data_planilha)
-        print(f'{l}- Dia {data_planilha} concluído com sucesso!{l}')
-
+    # --- 5. ATUALIZAÇÃO DO CONFIG ---
+    # Avança a data do config para o dia seguinte ao último processado (que foi "ontem")
+    writeDate(ontem_obj.strftime("%d/%m/%Y"))
+    print(f'{l}✅ Período concluído! config.json avançado para o próximo ciclo.{l}')
+    
     # Atualiza planilha de robos (fora do loop, apenas uma vez ao final)                              
     gsheets.attsheets(id_planilha_att_gsheet, aba_att_gsheet)
 

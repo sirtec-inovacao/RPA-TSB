@@ -1,82 +1,61 @@
 import os
 import requests
 import json
-from get_date_run import getInitialDate, getFinalDate 
 from auxiliar import *
 
-def relatorio_zuq():
-    # Definindo a URL base
+def baixar_zuq_periodo(data_inicio_obj, data_fim_obj):
     base_url = "https://app.zuq.com.br"
-
-    # Endpoint para extrair o relatório de notificações
     data_endpoint = "/api/notification/list"
 
+    start_date_str = data_inicio_obj.strftime("%Y-%m-%d")
+    end_date_str = data_fim_obj.strftime("%Y-%m-%d")
+
     try:
-        print(f'{l}- Iniciando integração com API ZUQ...') # LINHA NOVA ADICIONADA
+        print(f'{l}- Iniciando integração com API ZUQ...')
+        print(f'- Período: {start_date_str} até {end_date_str}')
+        
+        if not token_zuq:
+            print('# ERRO: TOKEN_ZUQ não configurado. Verifique o arquivo .env.')
+            with open(notifications_file, "w") as f:
+                json.dump([], f)
+            return
+        
+        headers = {"Authorization": f"{token_zuq}"}
+        dados_agregados = []
+        page = 1
 
-        # Obtendo as datas de início e fim no formato yyyy-mm-dd
-        start_date = getInitialDate().split("T")[0]
-        end_date = getFinalDate().split("T")[0]
-
-        if start_date and end_date:
-            # Configurando o cabeçalho com o token de autenticação
-            headers = {
-                "Authorization": f"{token_zuq}"
+        while True:
+            params = {
+                "start": start_date_str,
+                "end": end_date_str,
+                "page": page,
+                "size": 500,
+                "property": "ODOMETER"
             }
-            page = 1
-            dados_agregados = []
+            print(f"  - Buscando página {page}...")
+            data_response = requests.get(base_url + data_endpoint, headers=headers, params=params, timeout=30)
+            data_response.raise_for_status()
+            data = data_response.json()
 
-            while True:
-                # Configurando os parâmetros da consulta para a página atual
-                params = {
-                    "start": start_date,
-                    "end": end_date,
-                    "page": page,
-                    "size": 500,
-                    "property": "ODOMETER"
-                }
+            if not data:
+                break
 
-                # Fazendo a requisição GET para extrair os dados
-                data_response = requests.get(base_url + data_endpoint, headers=headers, params=params)
-                print(f"Data response: {data_response}")
-                # Verificando se a requisição foi bem-sucedida
-                data_response.raise_for_status()
-                data = data_response.json()
+            dados_agregados.extend(data)
+            print(f"  - Página {page}: {len(data)} registros (total: {len(dados_agregados)})")
+            page += 1
 
-                # Verifica se a lista retornada está vazia; se sim, sai do loop
-                if not data:
-                    break
-
-                # Adiciona os dados retornados à lista agregada
-                dados_agregados.extend(data)
-
-                # Incrementa para a próxima página
-                page += 1
-
-            # Salvando o resultado em um arquivo JSON
-            with open(notifications_file, "w") as json_file:
-                json.dump(dados_agregados, json_file, indent=4)
-            print(f"- Relatório salvo com sucesso em: {notifications_file}\n")
-        else:
-            print("# As datas não foram obtidas corretamente. Verifique o arquivo JSON.")
+        # Salva o resultado
+        os.makedirs(os.path.dirname(notifications_file), exist_ok=True)
+        with open(notifications_file, "w") as json_file:
+            json.dump(dados_agregados, json_file, indent=4)
+        print(f"✅ ZUQ: {len(dados_agregados)} registros salvos em: {notifications_file}")
 
     except requests.exceptions.RequestException as e:
-        print(f"# Erro na requisição: {e}\n")
-        # Cria arquivo vazio para não travar o restante do robô        
-        with open(notifications_file, "w") as json_file:
-            json.dump([], json_file)
-            
-    except json.JSONDecodeError:
-        print("# Erro ao decodificar a resposta JSON.")
-        # Cria arquivo vazio para não travar        
+        print(f"# Erro na requisição ZUQ: {e}")
         with open(notifications_file, "w") as json_file:
             json.dump([], json_file)
 
     except Exception as e:
-        print(f"# Ocorreu um erro genérico: {e}")
-        # Cria arquivo vazio para não travar        
+        print(f"# Erro genérico na ZUQ: {e}")
         with open(notifications_file, "w") as json_file:
             json.dump([], json_file)
-        
-if __name__ == "__main__":
-    relatorio_zuq()

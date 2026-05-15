@@ -4,15 +4,17 @@ __pycache__/
 *.pyc
 
 .env
-chaveGoogle.json
+app/chaveGoogle.json
 test_gpm.py
 
 *.png
 *.jpg
 
-temp/
-temp_downloads/
-final/
+app/temp/
+app/final/
+app/downloads/
+
+2026-*.csv
 
 .DS_Store
 Thumbs.db
