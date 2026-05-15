@@ -8,7 +8,7 @@ import gspread
 from gspread.exceptions import APIError
 from google.oauth2.service_account import Credentials
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -183,11 +183,11 @@ class Gsheets:
             traceback.print_exc()
             return False
 
-    def selecionar_meses_drive(self, folder_id):
+    def selecionar_meses_drive(self, folder_id, data_inicio_obj=None, data_fim_obj=None):
         """
-        Lista os arquivos yyyy-mm na pasta do Drive e seleciona os 2 mais recentes.
-        Regra: se o mes atual existe -> [atual, anterior].
-               se nao existe -> [2 ultimos disponiveis].
+        Lista os arquivos yyyy-mm na pasta do Drive e seleciona todos os meses que
+        estejam dentro do intervalo [data_inicio_obj, data_fim_obj].
+        Se as datas não forem informadas, mantém o comportamento de pegar os 2 últimos.
         """
         import re
 
@@ -219,16 +219,32 @@ class Gsheets:
                 print('# AVISO: Nenhum arquivo yyyy-mm encontrado na pasta do Drive.')
                 return []
 
-            mes_atual = datetime.now().strftime("%Y-%m")
-
-            if mes_atual in nomes_disponiveis:
-                idx = nomes_disponiveis.index(mes_atual)
-                selecionados = nomes_disponiveis[idx:idx+2]
+            # Se temos datas, filtramos o range. Caso contrário, pegamos os 2 últimos.
+            if data_inicio_obj and data_fim_obj:
+                # Gerar lista de todos os meses no range YYYY-MM
+                inicio_str = data_inicio_obj.strftime("%Y-%m")
+                fim_str = data_fim_obj.strftime("%Y-%m")
+                
+                selecionados = [m for m in nomes_disponiveis if inicio_str <= m <= fim_str]
+                
+                # O usuário mencionou que deveria pegar 2025-12 se começar em 2026-01
+                # Vamos garantir que pegamos pelo menos o mês anterior ao início para cobrir viradas de turno
+                mes_anterior_inicio = (data_inicio_obj - timedelta(days=15)).strftime("%Y-%m")
+                if mes_anterior_inicio in nomes_disponiveis and mes_anterior_inicio not in selecionados:
+                    selecionados.append(mes_anterior_inicio)
+                
+                if not selecionados:
+                    selecionados = nomes_disponiveis[:2]
             else:
-                selecionados = nomes_disponiveis[:2]
+                mes_atual = datetime.now().strftime("%Y-%m")
+                if mes_atual in nomes_disponiveis:
+                    idx = nomes_disponiveis.index(mes_atual)
+                    selecionados = nomes_disponiveis[idx:idx+2]
+                else:
+                    selecionados = nomes_disponiveis[:2]
 
-            selecionados = sorted(selecionados)
-            print(f"- Arquivos yyyy-mm disponíveis na pasta: {nomes_disponiveis[:5]}{'...' if len(nomes_disponiveis) > 5 else ''}")
+            selecionados = sorted(list(set(selecionados))) # Garante únicos e ordem cronológica
+            print(f"- Meses identificados no range: {selecionados}")
             return selecionados
 
         except Exception as e:

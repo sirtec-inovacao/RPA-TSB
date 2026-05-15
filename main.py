@@ -16,8 +16,11 @@ def main():
 
     print(f'{t}\t\tINICIANDO EXECUCAO ROBO TSB{t}')
 
+    print("- Inicializando Chrome...")
     chrome = Chrome()
+    print("- Inicializando Gsheets...")
     gsheets = Gsheets()
+    print("- Obtendo datas do sistema...")
 
     hoje = datetime.now().strftime("%d/%m/%Y")
     hoje_obj = datetime.strptime(hoje, "%d/%m/%Y")
@@ -44,7 +47,19 @@ def main():
     import shutil as _shutil
     for _pasta in [path_downloads, path_temp]:
         if os.path.exists(_pasta):
-            _shutil.rmtree(_pasta)
+            try:
+                # Tenta remover tudo. Se falhar (ex: arquivo aberto), remove o que der.
+                for filename in os.listdir(_pasta):
+                    file_path = os.path.join(_pasta, filename)
+                    try:
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            os.unlink(file_path)
+                        elif os.path.isdir(file_path):
+                            _shutil.rmtree(file_path)
+                    except Exception as e:
+                        print(f"  # Aviso: Não foi possível remover {filename} (pode estar aberto).")
+            except Exception as e:
+                print(f"  # Erro ao limpar {_pasta}: {e}")
         os.makedirs(_pasta, exist_ok=True)
     print(f"- Pastas de trabalho limpas: downloads e temp.")
     
@@ -54,7 +69,7 @@ def main():
     # Lista os arquivos da pasta do Drive no padrão yyyy-mm e decide quais baixar
     # Regra: se o mês atual existe, baixa ele + anterior. Se não existe, baixa os 2 últimos disponíveis.
     print(f"{l}- Consultando arquivos disponíveis na pasta do Drive...")
-    meses_str = gsheets.selecionar_meses_drive(id_pasta_pontos)
+    meses_str = gsheets.selecionar_meses_drive(id_pasta_pontos, data_planilha_obj, ontem_obj)
     print(f"- Meses selecionados para download: {meses_str}")
     arquivos_drive = gsheets.download_arquivos_pasta_drive(id_pasta_pontos, meses_str, path_downloads)
     
@@ -89,7 +104,10 @@ def main():
 
     # --- 2. DOWNLOAD ZUQ ---
     print(f"{l}- Fazendo download dos arquivos ZUQ")
-    az.baixar_zuq_periodo(data_planilha_obj, ontem_obj)
+    sucesso_zuq = az.baixar_zuq_periodo(data_planilha_obj, ontem_obj)
+    if not sucesso_zuq:
+        print(f"{l}# ERRO CRÍTICO: Falha na conexão com a API ZUQ. Interrompendo execução.")
+        return
     
     # --- 3. DOWNLOAD GPM ---
     print(f"{l}- Fazendo download dos arquivos GPM (BA e CE)")
