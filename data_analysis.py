@@ -190,31 +190,44 @@ def process_vehicle_logs_by_operation(path_temp, operacao, notifications_file):
     except Exception as e:
         print(f"# Erro ao carregar arquivo de notificações ({notifications_file}): {e}")
 
-    # Função para encontrar a data do evento correspondente à placa no arquivo de notificações
-    def find_event_date(plate):
+    # Pré-indexar as notificações por placa para otimizar a busca
+    notificacoes_por_placa = {}
+    for notification in notifications_data:
+        vehicle = notification.get('vehicle', {})
+        plate_n = vehicle.get('licensePlate')
+        if plate_n:
+            plate_n = plate_n.strip().upper().replace("-", "").replace(" ", "")
+            if plate_n not in notificacoes_por_placa:
+                notificacoes_por_placa[plate_n] = []
+            notificacoes_por_placa[plate_n].append(notification)
+
+    # Função para encontrar a data do evento correspondente à placa e ao DIA do serviço
+    def find_event_date(plate, data_servico_str):
         if not isinstance(plate, str): return None
         plate_search = plate.strip().upper().replace("-", "").replace(" ", "")
-        
-        for notification in notifications_data:
-            vehicle = notification.get('vehicle', {})
-            plate_notification = vehicle.get('licensePlate')
-            
-            if plate_notification:
-                plate_notification = plate_notification.strip().upper().replace("-", "").replace(" ", "")
-                
-                if plate_notification == plate_search:
-                    event_date = notification.get('eventDate')
-                    if event_date:
-                        try:
-                            # Remove milissegundos se houver (corta tudo depois do ponto)
-                            if "." in event_date:
-                                event_date = event_date.split(".")[0]
 
-                            # Converter a data para o formato dd/mm/yyyy hh:mm
-                            dt_obj = datetime.strptime(event_date, "%Y-%m-%dT%H:%M:%S")
-                            return dt_obj.strftime("%d/%m/%Y %H:%M")
-                        except ValueError:
-                            print(f"# Erro ao converter data '{event_date}' para placa {plate}")
+        # Converter a data do serviço (DD/MM/YYYY) para objeto date para comparação
+        try:
+            data_servico = datetime.strptime(data_servico_str, "%d/%m/%Y").date()
+        except Exception:
+            data_servico = None
+
+        candidatos = notificacoes_por_placa.get(plate_search, [])
+        for notification in candidatos:
+            event_date = notification.get('eventDate')
+            if event_date:
+                try:
+                    if "." in event_date:
+                        event_date = event_date.split(".")[0]
+                    dt_obj = datetime.strptime(event_date, "%Y-%m-%dT%H:%M:%S")
+
+                    # Filtrar somente notificações do mesmo dia do serviço GPM
+                    if data_servico and dt_obj.date() != data_servico:
+                        continue
+
+                    return dt_obj.strftime("%d/%m/%Y %H:%M")
+                except ValueError:
+                    print(f"# Erro ao converter data '{event_date}' para placa {plate}")
         return None
 
     # Ler o arquivo "consulta turno" correspondente à operação
@@ -235,9 +248,10 @@ def process_vehicle_logs_by_operation(path_temp, operacao, notifications_file):
     # Iterar sobre as linhas do DataFrame "consulta turno"
     for index, row in consulta_turno_df.iterrows():
         plate = row['placa']
+        data_servico_str = str(row.get('data', ''))
         # Verificar se a coluna 'hour_km_run_pontomais' está vazia ou tem valor "0"
         if pd.isna(row['hour_km_run_pontomais']) or row['hour_km_run_pontomais'] == "0":
-            event_date = find_event_date(plate)
+            event_date = find_event_date(plate, data_servico_str)
             if event_date:
                 consulta_turno_df.at[index, 'hour_km_run_pontomais'] = event_date
 
