@@ -82,18 +82,36 @@ class Gsheets:
             logger.error(f'[AVISO] Falha ao conectar com o Google Sheets/Drive: {e}')
 
     def attsheets(self, planilha_id, aba_nome):
-        """Atualiza a célula B1 da aba com a data/hora atual."""
-        while True:
+        """Atualiza a celula B1 da aba com a data/hora atual."""
+        if not self.cliente:
+            logger.error("[attsheets] Cliente Google Sheets nao disponivel. Atualizacao ignorada.")
+            return
+        if not planilha_id:
+            logger.error("[attsheets] ID da planilha nao configurado (ID_PLANILHA_ATT_GSHEET). Atualizacao ignorada.")
+            return
+
+        tentativas = 0
+        while tentativas < 5:
             try:
                 planilha = self.cliente.open_by_key(planilha_id)
                 aba = planilha.worksheet(aba_nome)
                 data_hora_atual = datetime.now().strftime('%d/%m/%Y %H:%M')
                 aba.update_cell(1, 2, data_hora_atual)
+                print(f"- Planilha de controle atualizada: {data_hora_atual}")
                 return
             except APIError as e:
                 if '429' in str(e):
-                    logger.error("[AVISO] Erro 429: Limite de requisicoes excedido. Aguardando 60s...")
+                    logger.error("[attsheets] Erro 429: limite de requisicoes. Aguardando 60s...")
                     sleep(60)
+                    tentativas += 1
+                else:
+                    logger.error(f"[attsheets] Erro da API Google: {e}")
+                    return
+            except Exception as e:
+                logger.error(f"[attsheets] Erro inesperado ao atualizar planilha: {e}")
+                return
+
+        logger.error("[attsheets] Maximo de tentativas atingido. Planilha NAO atualizada.")
 
     def acessos(self, texto_local='', nome_aba=None):
         """

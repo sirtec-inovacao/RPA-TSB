@@ -121,33 +121,37 @@ def process_consulta_turno_files(path_temp, pontomais_df, operacao):
             file_path = os.path.join(path_temp, filename)
             consulta_turno_df = pd.read_csv(file_path, sep=';', encoding='utf-8-sig')
 
-            # Função para extrair o primeiro nome da coluna 'parceiros'
-            def extrair_primeiro_nome(parceiros):
-                if isinstance(parceiros, str):
-                    # Pega o primeiro nome e limpa espaços/converte para maiúsculo
-                    return parceiros.split(' - ')[0].strip().upper()
-                return None
-            
-            # Aplicar a função para extrair o primeiro nome em cada linha da coluna 'parceiros'
-            consulta_turno_df['primeiro_nome'] = consulta_turno_df['parceiros'].apply(extrair_primeiro_nome)
-            
+            # Extrai primeiro nome (vetorizado, sem apply)
+            consulta_turno_df['primeiro_nome'] = (
+                consulta_turno_df['parceiros']
+                .astype(str)
+                .str.split(' - ')
+                .str[0]
+                .str.strip()
+                .str.upper()
+            )
+
             # Encontrar o menor horário de ponto batido por um membro da equipe
+            # (cruzamento por Nome + Data — sem bias do histórico inteiro)
             df_parceiros_resumo = loc_menor_entrada_pontomais()
-            
-            # Juntar DataFrames pelo ID do turno (Garante 100% de precisão mesmo com nomes diferentes)
+
+            # Juntar DataFrames pelo ID do turno
             consulta_turno_df = consulta_turno_df.merge(
                 df_parceiros_resumo[['id', 'menor_tempo']],
                 on='id',
                 how='left'
             )
-            
+
             # Renomear a coluna 'menor_tempo' para 'hora_pontomais'
             consulta_turno_df.rename(columns={'menor_tempo': 'hora_pontomais'}, inplace=True)
 
-            # Criar a coluna 'date_hour_pontomais'
+            # Criar a coluna 'date_hour_pontomais' (vetorizado: None onde não há hora)
+            tem_hora = consulta_turno_df['hora_pontomais'].notna()
             consulta_turno_df['date_hour_pontomais'] = (
-                consulta_turno_df['data'].astype(str) + ' ' + consulta_turno_df['hora_pontomais'].astype(str)
-            )
+                consulta_turno_df['data'].astype(str).str.strip()
+                + ' '
+                + consulta_turno_df['hora_pontomais'].astype(str)
+            ).where(tem_hora, other=None)
 
             # Salvar o arquivo "consulta turno" enriquecido
             consulta_turno_df.to_csv(file_path, sep=';', index=False, encoding='utf-8-sig')
@@ -317,43 +321,64 @@ def criar_dataframe(diretorio, comeca_com, termina_com):
     
 def loc_menor_entrada_pontomais():
     """
-    Versão otimizada: usa explode + merge vetorizado em vez de apply() linha-a-linha.
-    Reduz a complexidade de O(n*m) para O(n log n).
+    Versão corrigida e otimizada:
+
+    CORREÇÃO DO BUG:
+      Cruzamento agora usa Nome + Data, eliminando o viés do histórico inteiro.
+      Antes, o lookup era só por nome → pegava o menor horário de qualquer dia
+      no histórico, causando horas incorretas no arquivo final.
+
+    OTIMIZAÇÕES:
+      1. Lê apenas as 3 colunas necessárias do Excel (Data, Nome, 1ª Entrada)
+         via usecols — reduz drasticamente o tempo de I/O para arquivos grandes.
+      2. Usa format explícito nos pd.to_datetime, eliminando inferência lenta.
+      3. Pipeline vetorizado (sem apply), complexidade O(n log n).
     """
-    df_pontomais = criar_dataframe(path_temp, 'Pontomais_final', '.xlsx')
+    caminho_pontomais = os.path.join(path_temp, 'Pontomais_final.xlsx')
+    df_pontomais = pd.read_excel(
+        caminho_pontomais,
+        usecols=['Data', 'Nome', '1ª Entrada'],  # lê só o necessário
+        dtype=str
+    )
     df_consulta = criar_dataframe(path_temp, 'consulta turno', '.csv')
 
     if '1ª Entrada' not in df_pontomais.columns:
         df_pontomais['1ª Entrada'] = None
-    
-    # ----- 1. Prepara o lookup do Pontomais -----
-    # Normaliza o nome para garantir match case-insensitive
+
+    # ----- 1. Prepara o lookup do Pontomais (Nome + Data) -----
     df_pontomais['_nome_key'] = df_pontomais['Nome'].astype(str).str.strip().str.upper()
-    
-    # Converte '1ª Entrada' (HH:MM) para datetime para comparar numérico
+
+    # Data do Pontomais vem como YYYY-MM-DD → converte para DD/MM/YYYY
+    # format explícito evita inferência e warnings de performance
+    df_pontomais['_data_pm'] = pd.to_datetime(
+        df_pontomais['Data'], format='%Y-%m-%d', errors='coerce'
+    ).dt.strftime('%d/%m/%Y')
+
+    # Converte '1ª Entrada' (HH:MM) para datetime para comparar numericamente
     df_pontomais['_entrada_dt'] = pd.to_datetime(
-        df_pontomais['1ª Entrada'].astype(str), format='%H:%M', errors='coerce'
+        df_pontomais['1ª Entrada'], format='%H:%M', errors='coerce'
     )
-    
-    # Lookup final: menor entrada por nome (já vetorizado)
+
+    # Lookup: menor entrada por Nome + Data (CORREÇÃO DO BUG)
     lookup = (
         df_pontomais
         .dropna(subset=['_entrada_dt'])
-        .groupby('_nome_key')['_entrada_dt']
+        .groupby(['_nome_key', '_data_pm'])['_entrada_dt']
         .min()
         .reset_index()
         .rename(columns={'_entrada_dt': '_menor_entrada'})
     )
-    
-    # ----- 2. Explode parceiros em 1 linha por parceiro -----
-    df_parceiros = df_consulta[['id', 'parceiros']].copy()
+
+    # ----- 2. Explode parceiros em 1 linha por parceiro + data -----
+    df_parceiros = df_consulta[['id', 'parceiros', 'data']].copy()
     df_parceiros['_parceiro'] = df_parceiros['parceiros'].astype(str).str.split(' - ')
     df_parceiros = df_parceiros.explode('_parceiro')
     df_parceiros['_nome_key'] = df_parceiros['_parceiro'].str.strip().str.upper()
-    
-    # ----- 3. Merge com lookup do Pontomais -----
-    df_merged = df_parceiros.merge(lookup, on='_nome_key', how='left')
-    
+    df_parceiros['_data_pm']  = df_parceiros['data'].astype(str).str.strip()
+
+    # ----- 3. Merge por Nome + Data -----
+    df_merged = df_parceiros.merge(lookup, on=['_nome_key', '_data_pm'], how='left')
+
     # ----- 4. Menor entrada por ID de turno -----
     df_min = (
         df_merged
@@ -361,16 +386,18 @@ def loc_menor_entrada_pontomais():
         .min()
         .reset_index()
     )
-    
-    # Converte de volta para time
-    df_min['menor_tempo'] = df_min['_menor_entrada'].dt.time
-    # None onde não encontrou nenhum ponto
+
+    # Converte de volta para HH:MM (string), None onde não encontrou ponto
+    df_min['menor_tempo'] = df_min['_menor_entrada'].dt.strftime('%H:%M')
     df_min.loc[df_min['_menor_entrada'].isna(), 'menor_tempo'] = None
-    
+
     resultado = df_min[['id', 'menor_tempo']]
-    resultado.to_csv(os.path.join(path_temp, 'menor-entrada-equipes.csv'), sep=';', index=False, encoding='utf-8-sig')
-    
-    print(f"- Cruzamento concluído: {len(resultado)} turnos processados, {resultado['menor_tempo'].notna().sum()} com ponto encontrado.")
+    resultado.to_csv(
+        os.path.join(path_temp, 'menor-entrada-equipes.csv'),
+        sep=';', index=False, encoding='utf-8-sig'
+    )
+
+    print(f"- Cruzamento concluido: {len(resultado)} turnos processados, {resultado['menor_tempo'].notna().sum()} com ponto encontrado.")
     return resultado
 
 
