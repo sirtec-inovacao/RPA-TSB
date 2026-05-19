@@ -96,7 +96,7 @@ class Gsheets:
                 planilha = self.cliente.open_by_key(planilha_id)
                 aba = planilha.worksheet(aba_nome)
                 data_hora_atual = datetime.now().strftime('%d/%m/%Y %H:%M')
-                aba.update_cell(1, 2, data_hora_atual)
+                aba.update_cell(2, 1, data_hora_atual)
                 print(f"- Planilha de controle atualizada: {data_hora_atual}")
                 return
             except APIError as e:
