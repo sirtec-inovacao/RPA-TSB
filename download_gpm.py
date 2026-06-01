@@ -4,6 +4,7 @@ import time
 import zipfile
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from time import sleep
@@ -91,10 +92,10 @@ class BrowserGPM:
             self.navegador.find_element(by=By.ID, value="idSenha").send_keys(senha)
             sleep(0.3)
 
-            # 3. Clica no botão de entrar por XPATH
-            xpath_entrar = '//input[contains(@value, "ntrar")]'
-            WebDriverWait(self.navegador, 60).until(EC.element_to_be_clickable((By.XPATH, xpath_entrar)))
-            self.navegador.find_element(by=By.XPATH, value=xpath_entrar).click()
+            # 3. Pressiona ENTER para efetuar o login
+            WebDriverWait(self.navegador, 60).until(EC.visibility_of_element_located((By.ID, "idSenha")))
+            self.navegador.find_element(by=By.ID, value="idSenha").send_keys(Keys.ENTER)
+            sleep(0.3)
             
             print('- GPM logado com sucesso')
             sleep(5)
