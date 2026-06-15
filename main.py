@@ -11,15 +11,21 @@ from datetime import datetime, timedelta
 from time import sleep
 import pandas as pd
 import os
+import sys
 
 def main():
 
     print(f'{t}\t\tINICIANDO EXECUCAO ROBO TSB{t}')
 
-    print("- Inicializando Chrome...")
-    chrome = Chrome()
     print("- Inicializando Gsheets...")
     gsheets = Gsheets()
+    
+    # Validação da conexão do Google Sheets/Drive no início
+    if gsheets.cliente is None or gsheets.servico_drive is None:
+        sys.exit("# ERRO CRÍTICO: Falha na conexão ou autenticação com as APIs do Google (Gsheets/Drive). Interrompendo execução.")
+
+    print("- Inicializando Chrome...")
+    chrome = Chrome()
     print("- Obtendo datas do sistema...")
 
     hoje = datetime.now().strftime("%d/%m/%Y")
@@ -30,8 +36,7 @@ def main():
     data_planilha = getDate()
     
     if data_planilha is None:
-        print(f"{l}# ERRO: Falha ao obter a data do config.{l}")
-        return
+        sys.exit("# ERRO CRÍTICO: Falha ao obter a data do config.json. Interrompendo execução.")
 
     data_planilha_obj = datetime.strptime(data_planilha, "%d/%m/%Y")
     hoje_obj = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -63,7 +68,13 @@ def main():
         os.makedirs(_pasta, exist_ok=True)
     print(f"- Pastas de trabalho limpas: downloads e temp.")
     
-    # --- 1. DOWNLOAD DRIVE (PONTOMAIS CONSOLIDADO) ---
+    # --- 1. DOWNLOAD ZUQ (CONEXÃO DA TELEMETRIA) ---
+    print(f"{l}- Fazendo download dos arquivos ZUQ")
+    sucesso_zuq = az.baixar_zuq_periodo(data_planilha_obj, ontem_obj)
+    if not sucesso_zuq:
+        sys.exit("# ERRO CRÍTICO: Falha na conexão ou download da API ZUQ. Interrompendo execução.")
+
+    # --- 2. DOWNLOAD DRIVE (PONTOMAIS CONSOLIDADO) ---
     id_pasta_pontos = "1fDcVXWg1YJ3xlAer0JmOD59XtryiWR1N"
     
     # Lista os arquivos da pasta do Drive no padrão yyyy-mm e decide quais baixar
@@ -97,17 +108,9 @@ def main():
             df_consolidado.to_excel(caminho_ponto_temp, index=False)
             print(f"- Pontomais consolidado: {len(df_consolidado)} linhas")
         else:
-            print("# ERRO: Nenhum arquivo do Drive pôde ser lido.")
-            caminho_ponto_temp = None
+            sys.exit("# ERRO CRÍTICO: Nenhum arquivo do Drive pôde ser lido. Interrompendo execução.")
     else:
-        print("# AVISO: Nenhum arquivo do Drive foi encontrado para os meses informados.")
-
-    # --- 2. DOWNLOAD ZUQ ---
-    print(f"{l}- Fazendo download dos arquivos ZUQ")
-    sucesso_zuq = az.baixar_zuq_periodo(data_planilha_obj, ontem_obj)
-    if not sucesso_zuq:
-        print(f"{l}# ERRO CRÍTICO: Falha na conexão com a API ZUQ. Interrompendo execução.")
-        return
+        sys.exit("# ERRO CRÍTICO: Nenhum arquivo do Drive foi encontrado para os meses informados. Interrompendo execução.")
     
     # --- 3. DOWNLOAD GPM ---
     print(f"{l}- Fazendo download dos arquivos GPM (BA e CE)")

@@ -67,11 +67,11 @@ graph TD
     D -- Sim --> E([Fim: Tudo Processado])
     D -- Não --> F[Limpar app/downloads/ e app/temp/]
     
-    F --> G[Listar & baixar arquivos Pontomais do Drive]
-    G --> H[Mesclar arquivos e salvar Pontomais_final.xlsx]
+    F --> G[Chamar API ZUQ por lotes de 30 dias]
+    G --> H[Salvar telemetria em notifications_report.json]
     
-    H --> I[Chamar API ZUQ por lotes de 30 dias]
-    I --> J[Salvar telemetria em notifications_report.json]
+    H --> I[Listar & baixar arquivos Pontomais do Drive]
+    I --> J[Mesclar arquivos e salvar Pontomais_final.xlsx]
     
     J --> K[Selecionar Operação: BA ou CE]
     
