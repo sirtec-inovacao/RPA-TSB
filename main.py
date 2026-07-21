@@ -75,14 +75,10 @@ def main():
         sys.exit("# ERRO CRÍTICO: Falha na conexão ou download da API ZUQ. Interrompendo execução.")
 
     # --- 2. DOWNLOAD DRIVE (PONTOMAIS CONSOLIDADO) ---
-    id_pasta_pontos = "1fDcVXWg1YJ3xlAer0JmOD59XtryiWR1N"
+    id_pasta_pontos = "17YRd6kof7M7EpO3f5mbi6OIMYPBhox1f"
     
-    # Lista os arquivos da pasta do Drive no padrão yyyy-mm e decide quais baixar
-    # Regra: se o mês atual existe, baixa ele + anterior. Se não existe, baixa os 2 últimos disponíveis.
-    print(f"{l}- Consultando arquivos disponíveis na pasta do Drive...")
-    meses_str = gsheets.selecionar_meses_drive(id_pasta_pontos, data_planilha_obj, ontem_obj)
-    print(f"- Meses selecionados para download: {meses_str}")
-    arquivos_drive = gsheets.download_arquivos_pasta_drive(id_pasta_pontos, meses_str, path_downloads)
+    print(f"{l}- Baixando dados_gold.parquet da pasta do Drive...")
+    arquivos_drive = gsheets.download_arquivos_pasta_drive(id_pasta_pontos, ["dados_gold.parquet"], path_downloads)
     
     # Concatena arquivos se houver e salva no path_temp
     if arquivos_drive:
@@ -90,7 +86,9 @@ def main():
         for arq in arquivos_drive:
             ext = os.path.splitext(arq)[1].lower()
             try:
-                if ext == '.csv':
+                if ext == '.parquet':
+                    dfs.append(pd.read_parquet(arq))
+                elif ext == '.csv':
                     # Arquivos do Drive usam ; como separador
                     dfs.append(pd.read_csv(arq, sep=';', encoding='utf-8-sig', dtype=str))
                 elif ext in ('.xlsx', '.xls'):
