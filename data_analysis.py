@@ -74,15 +74,15 @@ def find_and_process_files(path_temp, operacao):
             
 def process_pontomais_files(path_temp):
     """
-    Lê o arquivo Pontomais_final.xlsx (já consolidado pelo main.py a partir dos CSVs yyyy-mm
-    baixados do Drive) e garante que a coluna '1ª Entrada' existe para o cruzamento com GPM.
+    Lê o arquivo Pontomais_final.csv (já consolidado pelo main.py a partir do parquet do Drive)
+    e garante que a coluna '1ª Entrada' existe para o cruzamento com GPM.
     """
-    caminho_consolidado = os.path.join(path_temp, "Pontomais_final.xlsx")
+    caminho_consolidado = os.path.join(path_temp, "Pontomais_final.csv")
     
     # Verifica se o arquivo consolidado já foi gerado pelo main.py
     if not os.path.exists(caminho_consolidado):
         # Fallback: tenta ler CSVs yyyy-mm diretamente na pasta temp
-        print("# AVISO: Pontomais_final.xlsx não encontrado. Tentando montar a partir de CSVs...")
+        print("# AVISO: Pontomais_final.csv não encontrado. Tentando montar a partir de CSVs...")
         dfs = []
         for filename in sorted(os.listdir(path_temp)):
             if filename.endswith('.csv') and len(filename) == 11:  # Padrão yyyy-mm.csv
@@ -99,17 +99,17 @@ def process_pontomais_files(path_temp):
             return
         
         final_df = pd.concat(dfs, ignore_index=True)
-        final_df.to_excel(caminho_consolidado, index=False)
-        print(f"- Pontomais_final.xlsx gerado com {len(final_df)} linhas.")
+        final_df.to_csv(caminho_consolidado, index=False, sep=';', encoding='utf-8-sig')
+        print(f"- Pontomais_final.csv gerado com {len(final_df)} linhas.")
     else:
-        print(f"- Pontomais_final.xlsx já existe ({caminho_consolidado}). Usando arquivo existente.")
-        final_df = pd.read_excel(caminho_consolidado, dtype=str)
+        print(f"- Pontomais_final.csv já existe ({caminho_consolidado}). Usando arquivo existente.")
+        final_df = pd.read_csv(caminho_consolidado, dtype=str, sep=';', encoding='utf-8-sig')
 
     # Garante que a coluna '1ª Entrada' existe (necessária para o cruzamento com GPM)
     if '1ª Entrada' not in final_df.columns:
         print("# AVISO: Coluna '1ª Entrada' não encontrada. Criando coluna vazia.")
         final_df['1ª Entrada'] = None
-        final_df.to_excel(caminho_consolidado, index=False)
+        final_df.to_csv(caminho_consolidado, index=False, sep=';', encoding='utf-8-sig')
     
     print(f"- process_pontomais_files concluído. Total de linhas: {len(final_df)}")
 
@@ -334,11 +334,13 @@ def loc_menor_entrada_pontomais():
       2. Usa format explícito nos pd.to_datetime, eliminando inferência lenta.
       3. Pipeline vetorizado (sem apply), complexidade O(n log n).
     """
-    caminho_pontomais = os.path.join(path_temp, 'Pontomais_final.xlsx')
-    df_pontomais = pd.read_excel(
+    caminho_pontomais = os.path.join(path_temp, 'Pontomais_final.csv')
+    df_pontomais = pd.read_csv(
         caminho_pontomais,
         usecols=['Data', 'Nome', '1ª Entrada'],  # lê só o necessário
-        dtype=str
+        dtype=str,
+        sep=';',
+        encoding='utf-8-sig'
     )
     df_consulta = criar_dataframe(path_temp, 'consulta turno', '.csv')
 

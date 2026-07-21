@@ -40,7 +40,7 @@ chave_json = os.path.join(path_script, "chaveGoogle.json")
 
 # Arquivos Temporários / Processamento
 records_file = os.path.join(path_temp, "records.json")
-pontomais_df = os.path.join(path_temp, "Pontomais_final.xlsx")
+pontomais_df = os.path.join(path_temp, "Pontomais_final.csv")
 notifications_file = os.path.join(path_temp, "notifications_report.json")
 
 # --- 4. CREDENCIAIS E IDs (.ENV) ---

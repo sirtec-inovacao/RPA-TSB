@@ -102,8 +102,8 @@ def main():
         if dfs:
             df_consolidado = pd.concat(dfs, ignore_index=True)
             os.makedirs(path_temp, exist_ok=True)
-            caminho_ponto_temp = os.path.join(path_temp, "Pontomais_final.xlsx")
-            df_consolidado.to_excel(caminho_ponto_temp, index=False)
+            caminho_ponto_temp = os.path.join(path_temp, "Pontomais_final.csv")
+            df_consolidado.to_csv(caminho_ponto_temp, sep=';', index=False, encoding='utf-8-sig')
             print(f"- Pontomais consolidado: {len(df_consolidado)} linhas")
         else:
             sys.exit("# ERRO CRÍTICO: Nenhum arquivo do Drive pôde ser lido. Interrompendo execução.")
