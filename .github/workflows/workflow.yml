@@ -2,7 +2,7 @@ name: Robô TSB
 
 on:  
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '0 9 * * *'
   workflow_dispatch: #Permite rodar manualmente clicando num botão no GitHub
       
 
